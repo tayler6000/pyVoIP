@@ -109,7 +109,7 @@ RTP.\ **RTPPacketManager**\ ()
     This rebuilds the ByteIO if packets are sent out of order.  Setting the argument *reset* to true will wipe all data in the ByteIO and insert in the data in the argument *data* at the position in the argument *offset*.
     
   **write**\ (offset, data)
-    Writes the data in the argument *data* to the ByteIO at the position in the argument *offset*.  RTP data comes with a timestamp that is passed as the offset in this case.  This makes it so a whole left by delayed packets can be filled later.  If a packet with a timestamp sooner than any other timestamp received, it will rebuild the ByteIO with the new data.  If this new position is over 100,000 bytes before the earliest byte, the ByteIO is completely wiped and starts over.  This is to prevent Overflow errors.
+    Writes the data in the argument *data* to the ByteIO at the position in the argument *offset*.  RTP data comes with a timestamp that is passed as the offset in this case.  This makes it so a hole left by delayed packets can be filled later.  If a packet with a timestamp sooner than any other timestamp received, it will rebuild the ByteIO with the new data.  If this new position is over 100,000 bytes before the earliest byte, the ByteIO is completely wiped and starts over.  This is to prevent Overflow errors.
 
 .. _RTPMessage:
 
@@ -163,7 +163,7 @@ RTP.\ **RTPMessage**\ (data, assoc)
     This method returns a string representation of the RTP packet excluding the payload.
     
   **parse**\ (data)
-    This method is called by the initialization of the class.  It determins the RTP version, whether the packet has padding, has a header extension, and other information about the backet.
+    This method is called by the initialization of the class.  It determines the RTP version, whether the packet has padding, has a header extension, and other information about the backet.
 
 .. _RTPClient:
 
@@ -178,11 +178,11 @@ The RTPClient is used to send and receive RTP packets and encode/decode the audi
     
     The *inIP* argument is used to receive incoming RTP message.
     
-    The *inPort* argument is the port RTPClient will bind to to receive incoming RTP messages.
+    The *inPort* argument is the port RTPClient will bind to, to receive incoming RTP packets.
     
-    The *outIP* argument is used to transmit RTP messages.
+    The *outIP* argument is used to transmit RTP packets.
     
-    The *outPort* argument is used to transmit RTP messages.
+    The *outPort* argument is used to transmit RTP packets.
     
     The *sendrecv* argument describes how the RTPClient should act.  Please reference `TransmitType<enums>` for more details.
     
@@ -204,7 +204,7 @@ The RTPClient is used to send and receive RTP packets and encode/decode the audi
     This method is called by RTPClient.start() and is responsible for transmitting RTP packets. **This should not be called by the** :term:`user`.
     
   **parsePacket**\ (packet)
-    This method is called by the recv() thread.  It convertes the argument *packet* into a :ref:`RTPMessage`, then sends it to the proper parse function depending on the :ref:`PayloadType<payload-type>`.
+    This method is called by the recv() thread.  It converts the argument *packet* into a :ref:`RTPMessage`, then sends it to the proper parse function depending on the :ref:`PayloadType<payload-type>`.
     
   **encodePacket**\ (payload)
     This method is called by the trans() thread.  It encoded the argument *payload* into the prefered codec.  Currently, PCMU is the hardcoded prefered codec.  The trans() thread will use the payload to create the RTP packet before transmitting.
