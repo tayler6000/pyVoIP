@@ -26,7 +26,7 @@ author = 'Tayler J Porter'
 # The full version, including alpha/beta/rc tags
 release = '0.5.0 Beta'
 
-master_doc = 'index.html'
+master_doc = 'index'
 
 # -- General configuration ---------------------------------------------------
 
