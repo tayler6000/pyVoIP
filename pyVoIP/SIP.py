@@ -517,7 +517,7 @@ class SIPClient():
         else:
           print("TODO: Add 400 Error on non processable request")
       except BlockingIOError:
-        pass
+        time.sleep(0.01)
       except SIPParseError as e:
         if "SIP Version" in str(e):
           request = self.genSIPVersionNotSupported(message)
@@ -712,7 +712,7 @@ class SIPClient():
     self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
     
     response = SIPMessage(self.s.recv(8192))
-    
+    print(response.summary())
     if response.status != SIPStatus(401):
       if response.status == SIPStatus(500):
         self.recvLock.release()

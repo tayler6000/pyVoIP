@@ -34,6 +34,8 @@ class VoIPCall():
     self.dtmfLock = Lock()
     self.dtmf = io.StringIO()
     
+    self.RTPClients = []
+    
     self.connections = 0
     self.audioPorts = 0
     self.videoPorts = 0
@@ -68,7 +70,7 @@ class VoIPCall():
       print("Unable to assign ports for RTP.") 
       return
     
-    self.RTPClients = []
+    
     
     for i in request.body['m']:
       assoc = {}
@@ -111,7 +113,6 @@ class VoIPCall():
     packet = self.dtmf.read(length)
     self.dtmfLock.release()
     return packet
-    
 
   def answer(self):
     if self.state != CallState.RINGING:
@@ -152,17 +153,16 @@ class VoIPCall():
     for x in self.RTPClients:
       x.write(data)
       
-  def readAudio(self, length = 160):
+  def readAudio(self, length=160, blocking=False):
+    if len(self.RTPClients) == 1:
+      return self.RTPClients[0].read(length, blocking)
     data = []
     for x in self.RTPClients:
       data.append(x.read(length))
-    if len(data) == 1:
-      return data[0]
-    else:
-      nd = audioop.add(data.pop(0), data.pop(0), 1) #Mix audio from different sources before returning
-      for d in data:
-        nd = audioop.add(nd, d, 1)
-      return nd
+    nd = audioop.add(data.pop(0), data.pop(0), 1) #Mix audio from different sources before returning
+    for d in data:
+      nd = audioop.add(nd, d, 1)
+    return nd
       
 
 class VoIPPhone():

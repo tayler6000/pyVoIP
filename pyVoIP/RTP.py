@@ -112,7 +112,7 @@ class RTPPacketManager():
     
   def read(self, length=160):
     while self.rebuilding: #This acts functionally as a lock while the buffer is being rebuilt.
-      print("Rebuilding")
+      time.sleep(0.01)
     self.bufferLock.acquire()
     packet = self.buffer.read(length)
     if len(packet)<length:
@@ -249,8 +249,14 @@ class RTPClient():
     self.sin.close()
     self.sout.close()
     
-  def read(self, length=160):
-    return self.pmin.read(length)
+  def read(self, length=160, blocking=False):
+    if not blocking:
+      return self.pmin.read(length)
+    packet = self.pmin.read(length)
+    while packet == bytes(length) and self.NSD:
+      time.sleep(0.01)
+      packet = self.pmin.read(length)
+    return packet
     
   def write(self, data):
     self.pmout.write(self.outOffset, data)
@@ -262,7 +268,7 @@ class RTPClient():
         packet = self.sin.recv(8192)
         self.parsePacket(packet)
       except BlockingIOError:
-        pass
+        time.sleep(0.01)
       except RTPParseError as e:
         print(str(e))
       except OSError:
