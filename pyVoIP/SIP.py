@@ -712,7 +712,7 @@ class SIPClient():
     self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
     
     response = SIPMessage(self.s.recv(8192))
-    print(response.summary())
+    
     if response.status != SIPStatus(401):
       if response.status == SIPStatus(500):
         self.recvLock.release()
