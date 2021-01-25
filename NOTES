@@ -1,0 +1,12 @@
+New in v1.0.0:
+Originate Calls
+Added blocking feature to readAudio, this makes readAudio not return until there is data to be returned.  If blocking is off and data is not available, bytes(length) will be returned.
+Now properly generating SIP tags to comply with the RFC.
+Other bug fixes
+
+Currently Known Issues:
+BYE request on originated calls causes a 500 Error on Asterisk 13 (other versions not tested).  Unsure what causes this, reach out if you have a fix.
+Currently does not work with PJSIP (Only tested with Asterisk 18)
+
+Upcoming patches/changes:
+Adjust code to be compatible with Asterisk PJSIP.

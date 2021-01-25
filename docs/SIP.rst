@@ -86,6 +86,9 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
   **recv**\ ()
     This method is called by SIPClient.start() and is responsible for receiving and parsing through SIP requests.  **This should not be called by the** :term:`user`.
     
+  **parseMessage**\ (message)
+    This method is called by SIPClient.recv() and is responsible for parsing through SIP responses.  **This should not be called by the** :term:`user`.
+    
   **start**\ ()
     This method is called by :ref:`VoIPPhone`.start().  It starts the REGISTER and recv() threads.  It is also what initiates the bound port.  **This should not be called by the** :term:`user`.
     
@@ -94,6 +97,9 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     
   **genCallID**\ ()
     This method is called by other 'gen' methods when a new Call-ID header is needed.  See `RFC 3261 Section 20.8 <https://tools.ietf.org/html/rfc3261#section-20.8>`_.  **This should not be called by the** :term:`user`.
+    
+  **genTag**\ ()
+    This method is called by other 'gen' methods when a new tag is needed. See `RFC 3261 Section 8.2.6.2 <https://tools.ietf.org/html/rfc3261#section-8.2.6.2>`_.  **This should not be called by the** :term:`user`.
     
   **getSIPVersoinNotSupported**\ ()
     This method is called by the recv() thread when it has received a SIP message that is not SIP version 2.0.
@@ -106,6 +112,12 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     
   **genBusy**\ (request)
     This method generates a SIP 486 'Busy Here' response.  The *request* argument should be a SIP INVITE request.
+    
+  **genOk**\ (request)
+    This method generates a SIP 200 'Ok' response.  The *request* argument should be a SIP BYE request.
+    
+  **genInvite**\ (number, sess_id, ms, sendtype, branch, call_id)
+    This method generates a SIP INVITE request.  This is called by SIPClient.invite().  The *number* argument must be the number being called as a string.  The *sess_id* argument must be a unique number. The *ms* argument is a dictionary of the media types to be used.  Currently only PCMU and telephone-event is supported.  The *sendtype* argument must be an instance of :ref:`TransmitType`.  The *branch* argument must be a unique string starting with "z9hG4bK".  See `RFC 3261 Section 8.1.1.7 <https://tools.ietf.org/html/rfc3261#section-8.1.1.7>`_.  The *call_id* argument must be a unique string.  See `RFC 3261 Section 8.1.1.4 <https://tools.ietf.org/html/rfc3261#section-8.1.1.4>`_.
     
   **genRinging**\ (request)
     This method generates a SIP 180 'Ringing' response.  The *request* argument should be a SIP INVITE request.
@@ -123,6 +135,12 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     
   **genBye**\ (request)
     This method generates a SIP BYE request.  This is used to end a call. The *request* argument should be a SIP INVITE request.  **This should not be called by the** :term:`user`.
+    
+  **genAck**\ (request)
+    This method generates a SIP ACK response.  The *request* argument should be a SIP 401 response.
+    
+  **invite**\ (number, ms, sendtype)
+    This method generates a SIP INVITE request.  This method is called by :ref:`VoIPPhone`.call().  The *number* argument must be the number being called as a string.  The *ms* argument is a dictionary of the media types to be used.  Currently only PCMU and telephone-event is supported.  The *sendtype* argument must be an instance of :ref:`TransmitType`.  
     
   **bye**\ (request)
     This method is called by :ref:`VoIPCall`.hangup().  It calls genBye(), and then transmits the generated request.  **This should not be called by the** :term:`user`.

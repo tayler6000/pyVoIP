@@ -194,8 +194,11 @@ The RTPClient is used to send and receive RTP packets and encode/decode the audi
   **stop**\ ()
     This method is called by :ref:`VoIPCall`.hangup() and :ref:`VoIPCall`.bye().  It stops the recv() and trans() threads.  It will also close the bound port.  **This should not be called by the** :term:`user`.
     
-  **read**\ (length=160)
-    This method is called by :ref:`VoIPCall`.readAudio().  It reads linear/raw audio data from the received buffer. Returns *length* amount of bytes. Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.
+  **read**\ (length=160, blocking=True)
+    This method is called by :ref:`VoIPCall`.readAudio().  It reads linear/raw audio data from the received buffer. Returns *length* amount of bytes. Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.  When *blocking* is set to true, this function will not return until data is available.  When *blocking* is set to false and data is not available, this function will return bytes(length).
+    
+  **write**\ (data)
+    This method is called by :ref:`VoIPCall`.writeAudio().  It queues the data written to be sent to the :term:`client`.
     
   **recv**\ ()
     This method is called by RTPClient.start() and is responsible for receiving and parsing through RTP packets. **This should not be called by the** :term:`user`.

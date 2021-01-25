@@ -22,7 +22,10 @@ Enums
 .. _callstate:
 
 VoIP.\ **CallState**
-  CallState is an Enum with three attributes.
+  CallState is an Enum with four attributes.
+  
+  CallState.\ **DIALING***
+    This CallState is used to describe when a :term:`user` has originated a call to a :term:`client`, but it has yet to be answered.
   
   CallState.\ **RINGING**
     This CallState is used to describe when a :term:`client` is calling, but the call has yet to be answered.
@@ -80,6 +83,9 @@ The VoIPCall class is used to represent a single VoIP Session, which may be to m
     **answer**\ ()
       Answers the call if the phone's state is CallState.RINGING.
       
+    **answered**\ (request)
+      This function is called by :ref:`SIPClient` when a call originated by the :term:`user` has been answered by the :term:`client`.
+      
     **deny**\ ()
       Denies the call if the phone's state is CallState.RINGING.
       
@@ -92,8 +98,8 @@ The VoIPCall class is used to represent a single VoIP Session, which may be to m
     **writeAudio**\ (data)
       Writes linear/raw audio data to the transmit buffer before being encoded and sent.  The *data* argument MUST be bytes.  **This audio must be linear/not encoded,** :ref:`RTPClient` **will encode it before transmitting.**
       
-    **readAudio**\ (length=160)
-      Reads linear/raw audio data from the received buffer.  Returns *length* amount of bytes.  Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.
+    **readAudio**\ (length=160, blocking=True)
+      Reads linear/raw audio data from the received buffer.  Returns *length* amount of bytes.  Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.  When *blocking* is set to true, this function will not return until data is available.  When *blocking* is set to false and data is not available, this function will return bytes(length).
     
 .. _VoIPPhone:
 
@@ -128,5 +134,6 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
   **stop**\ ()
     This method ends all currently ongoing calls, then stops the :ref:`SIPClient` class
   
-  
+  **call**\ (number)
+    Originates a call using PCMU and telephone-event. The *number* argument must be a string, and it returns a :ref:`VoIPCall` class in CallState.DIALING.  You should use a while loop to wait until the CallState is ANSWRED. **NOTE:** In testing with Asterisk 13, calls made this way could not hangup.  This issue may exist on other PBXs as well.
   

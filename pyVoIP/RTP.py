@@ -94,14 +94,7 @@ class PayloadType(Enum):
   
   #Non-codec
   EVENT = "telephone-event", 8000, 0, "telephone-event"
-  
-'''
-Note to self.
 
-Probably should set the packet manager back to ByteIO to prevent out of order packets. 
-I'm thinking before write, log the cursor position, then go to the timestamp position,
-write, then go to the logged possition.  Again this will stop out of sync packet issues.
-'''
 class RTPPacketManager(): 
   def __init__(self):
     self.offset = 4294967296 #The largest number storable in 4 bytes + 1.  This will ensure the offset adjustment in self.write(offset, data) works.
@@ -249,7 +242,7 @@ class RTPClient():
     self.sin.close()
     self.sout.close()
     
-  def read(self, length=160, blocking=False):
+  def read(self, length=160, blocking=True):
     if not blocking:
       return self.pmin.read(length)
     packet = self.pmin.read(length)
