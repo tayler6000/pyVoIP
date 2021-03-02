@@ -9,6 +9,7 @@ import threading
 import time
 
 __all__ = ['add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType', 'RTPParseError', 'RTPProtocol', 'RTPPacketManager', 'RTPClient', 'TransmitType']
+debug = pyVoIP.debug
 
 def byte_to_bits(byte):
   byte = bin(ord(byte)).lstrip('-0b')
@@ -94,6 +95,7 @@ class PayloadType(Enum):
   
   #Non-codec
   EVENT = "telephone-event", 8000, 0, "telephone-event"
+  UNKOWN = "UNKOWN", 0, 0, "UNKOWN CODEC"
 
 class RTPPacketManager(): 
   def __init__(self):
@@ -109,7 +111,7 @@ class RTPPacketManager():
     self.bufferLock.acquire()
     packet = self.buffer.read(length)
     if len(packet)<length:
-      packet = packet + bytes(length-len(packet))
+      packet = packet + (b'\x80' * (length-len(packet)))
     self.bufferLock.release()
     return packet
     
@@ -167,7 +169,7 @@ class RTPMessage():
     byte = byte_to_bits(packet[0:1])
     self.version = int(byte[0:2], 2)
     if not self.version in self.RTPCompatibleVersions:
-      raise RTPParseError("RTP Version {} not compatible.".format(version))
+      raise RTPParseError("RTP Version {} not compatible.".format(self.version))
     self.padding = bool(int(byte[2], 2))
     self.extension = bool(int(byte[3], 2)) 
     self.CC = int(byte[4:], 2)
@@ -208,7 +210,16 @@ class RTPClient():
   def __init__(self, assoc, inIP, inPort, outIP, outPort, sendrecv, dtmf = None):
     self.NSD = True
     self.assoc = assoc # Example: {0: PayloadType.PCMU, 101: PayloadType.EVENT}
-    self.preference = PayloadType.PCMU
+    debug("Selecting audio codec for transmission")
+    for m in assoc:
+      try:
+        if int(assoc[m]) is not None:
+          debug(f"Selected {assoc[m]}")
+          self.preference = assoc[m] #Select the first available actual codec to encode with.  TODO: will need to change if video codecs are ever implemented.
+          break
+      except:
+        debug(f"{assoc[m]} cannot be selected as an audio codec")
+    
     self.inIP = inIP
     self.inPort = inPort
     self.outIP = outIP
@@ -246,7 +257,7 @@ class RTPClient():
     if not blocking:
       return self.pmin.read(length)
     packet = self.pmin.read(length)
-    while packet == bytes(length) and self.NSD:
+    while packet == (b'\x80'*length) and self.NSD:
       time.sleep(0.01)
       packet = self.pmin.read(length)
     return packet
@@ -263,7 +274,7 @@ class RTPClient():
       except BlockingIOError:
         time.sleep(0.01)
       except RTPParseError as e:
-        print(str(e))
+        debug(str(e))
       except OSError:
         pass
     
@@ -284,7 +295,7 @@ class RTPClient():
       packet += self.outSSRC.to_bytes(4, byteorder='big')
       packet += payload
       
-      #print(payload)
+      #debug(payload)
       
       try:
         self.sout.sendto(packet, (self.outIP, self.outPort))

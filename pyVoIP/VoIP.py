@@ -5,8 +5,10 @@ import io
 import pyVoIP
 import random
 import socket
+import warnings
 
 __all__ = ['CallState', 'InvalidRangeError', 'InvalidStateError', 'VoIPCall', 'VoIPPhone']
+debug = pyVoIP.debug
 
 class InvalidRangeError(Exception):
   pass
@@ -60,7 +62,7 @@ class VoIPCall():
           self.videoPorts += x['port_count']
           video.append(x)
         else:
-          print("Unknown media description: "+x['type'])
+          warnings.warn("Unknown media description: "+x['type'], stacklevel=2)
       
       #Ports Adjusted is used in case of multiple m=audio or m=video tags.
       if len(audio) > 0:
@@ -73,7 +75,7 @@ class VoIPCall():
         videoPortsAdj = 0
       
       if not ((audioPortsAdj == self.connections or self.audioPorts == 0) and (videoPortsAdj == self.connections or self.videoPorts == 0)):
-        print("Unable to assign ports for RTP.") 
+        warnings.warn("Unable to assign ports for RTP.", stacklevel=2) #TODO: Throw error to PBX in this case
         return
       
       for i in request.body['m']:
@@ -88,21 +90,32 @@ class VoIPCall():
               p = RTP.PayloadType(i['attributes'][x]['rtpmap']['name'])
               assoc[int(x)] = p
             except ValueError:
-              e = True
+              #e = True
+              pt = i['attributes'][x]['rtpmap']['name']
+              warnings.warn(f"RTP Payload type {pt} not found.", stacklevel=20)
+              warnings.simplefilter("default") #Resets the warning filter so this warning will come up again if it happens.  However, this also resets all other warnings as well.
+              p = RTP.PayloadType("UNKOWN")
+              assoc[int(x)] = p
         
         if e:
-          raise RTP.ParseError("RTP Payload type {} not found.".format(str(pt)))
+          raise RTP.RTPParseError("RTP Payload type {} not found.".format(str(pt)))
+        
+        #Make sure codecs are compatible. 
+        codecs = {}
+        for m in assoc:
+          if assoc[m] in pyVoIP.RTPCompatibleCodecs:
+            codecs[m] = assoc[m]
+        #TODO: If no codecs are compatible then send error to PBX.
         
         port = None
         while port == None:
           proposed = random.randint(self.rtpPortLow, self.rtpPortHigh)
           if not proposed in self.phone.assignedPorts:
             self.phone.assignedPorts.append(proposed)
-            self.assignedPorts[proposed] = assoc
+            self.assignedPorts[proposed] = codecs
             port = proposed
         for ii in range(len(request.body['c'])):
-          offset = ii * 2
-          self.RTPClients.append(RTP.RTPClient(assoc, self.myIP, port, request.body['c'][ii]['address'], i['port']+ii, request.body['a']['transmit_type'], dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
+          self.RTPClients.append(RTP.RTPClient(codecs, self.myIP, port, request.body['c'][ii]['address'], i['port']+ii, request.body['a']['transmit_type'], dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
     elif callstate == CallState.DIALING:
       self.ms = ms
       for m in self.ms:
@@ -123,13 +136,27 @@ class VoIPCall():
     self.dtmfLock.release()
     return packet
 
-  def answer(self):
-    if self.state != CallState.RINGING:
-      raise InvalidStateError("Call is not ringing")
+  def genMs(self): #For answering originally and for re-negotiations
     m = {}
     for x in self.RTPClients:
       x.start()
       m[x.inPort] = x.assoc
+    
+    return m
+
+  def renegotiate(self, request):
+    m = self.genMs()
+    message = self.sip.genAnswer(request, self.session_id, m, request.body['a']['transmit_type'])
+    self.sip.out.sendto(message.encode('utf8'), (self.phone.server, self.phone.port))
+    for i in request.body['m']:
+      for ii, client in zip(range(len(request.body['c'])), self.RTPClients):
+        client.outIP = request.body['c'][ii]['address']
+        client.outPort = i['port']+ii #TODO: Check IPv4/IPv6
+
+  def answer(self):
+    if self.state != CallState.RINGING:
+      raise InvalidStateError("Call is not ringing")
+    m = self.genMs()
     message = self.sip.genAnswer(self.request, self.session_id, m, self.request.body['a']['transmit_type'])
     self.sip.out.sendto(message.encode('utf8'), (self.phone.server, self.phone.port))
     self.state = CallState.ANSWERED
@@ -157,7 +184,6 @@ class VoIPCall():
       
       
       for ii in range(len(request.body['c'])):
-        offset = ii * 2
         self.RTPClients.append(RTP.RTPClient(assoc, self.myIP, self.port, request.body['c'][ii]['address'], i['port']+ii, request.body['a']['transmit_type'], dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
     
     for x in self.RTPClients:
@@ -165,7 +191,33 @@ class VoIPCall():
     self.request.headers['Contact'] = request.headers['Contact']
     self.request.headers['To']['tag'] = request.headers['To']['tag']
     self.state = CallState.ANSWERED
-      
+  
+  def notFound(self, request):
+    if self.state != CallState.DIALING:
+      debug(f"TODO: 500 Error, received a not found response for a call not in the dailing state.  Call: {self.call_id}, Call State: {self.state}")
+      return
+    
+    for x in self.RTPClients:
+      x.stop()
+    self.state = CallState.ENDED
+    del self.phone.calls[self.request.headers['Call-ID']]
+    debug("Call not found and terminated")
+    warnings.warn(f"The number '{request.headers['To']['number']}' was not found.  Did you call the wrong number? CallState set to CallState.ENDED.", stacklevel=20)
+    warnings.simplefilter("default") #Resets the warning filter so this warning will come up again if it happens.  However, this also resets all other warnings as well.
+  
+  def unavailable(self, request):
+    if self.state != CallState.DIALING:
+      debug(f"TODO: 500 Error, received an unavailable response for a call not in the dailing state.  Call: {self.call_id}, Call State: {self.state}")
+      return
+    
+    for x in self.RTPClients:
+      x.stop()
+    self.state = CallState.ENDED
+    del self.phone.calls[self.request.headers['Call-ID']]
+    debug("Call unavailable and terminated")
+    warnings.warn(f"The number '{request.headers['To']['number']}' was unavailable.  CallState set to CallState.ENDED.", stacklevel=20)
+    warnings.simplefilter("default") #Resets the warning filter so this warning will come up again if it happens.  However, this also resets all other warnings as well.
+  
   def deny(self):
     if self.state != CallState.RINGING:
       raise InvalidStateError("Call is not ringing")
@@ -232,22 +284,29 @@ class VoIPPhone():
     
   def callback(self, request):
     call_id = request.headers['Call-ID']
-    #print("Callback: "+request.summary())
+    #debug("Callback: "+request.summary())
     if request.type == pyVoIP.SIP.SIPMessageType.MESSAGE:
-      #print("This is a message")
+      #debug("This is a message")
       if request.method == "INVITE":
         if call_id in self.calls:
+          debug("Re-negotiation detected!")
+          self.calls[call_id].renegotiate(request)
+          #message = self.sip.genAnswer(request, self.calls[call_id].session_id, self.calls[call_id].genMs(), request.body['a']['transmit_type'])
+          #self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
           return #Raise Error
         if self.callCallback == None:
           message = self.sip.genBusy(request)
           self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
         else:
+          debug("New call!")
           sess_id = None
           while sess_id == None:
             proposed = random.randint(1, 100000)
             if not proposed in self.session_ids:
               self.session_ids.append(proposed)
               sess_id = proposed
+          message = self.sip.genRinging(request)
+          self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
           self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP, portRange=(self.rtpPortLow, self.rtpPortHigh))
           try:
             t = Timer(1, self.callCallback, [self.calls[call_id]])
@@ -263,12 +322,30 @@ class VoIPPhone():
         self.calls[call_id].bye()
     else:
       if request.status == SIP.SIPStatus.OK:
-        #print("OK recieved")
+        debug("OK recieved")
         if not call_id in self.calls:
-          #print("Unknown call")
+          debug("Unknown call")
           return
         self.calls[call_id].answered(request)
-        #print("Answered")
+        debug("Answered")
+        ack = self.sip.genAck(request)
+        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+      elif request.status == SIP.SIPStatus.NOT_FOUND:
+        debug("Not Found recieved, invalid number called?")
+        if not call_id in self.calls:
+          debug("Unkown call")
+          debug("TODO: Add 481 here as server is probably waiting for an ACK")
+        self.calls[call_id].notFound(request)
+        debug("Terminating Call")
+        ack = self.sip.genAck(request)
+        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+      elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
+        debug("Service Unavailable recieved")
+        if not call_id in self.calls:
+          debug("Unkown call")
+          debug("TODO: Add 481 here as server is probably waiting for an ACK")
+        self.calls[call_id].unavailable(request)
+        debug("Terminating Call")
         ack = self.sip.genAck(request)
         self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
     

@@ -1,9 +1,9 @@
 # pyVoIP
 PyVoIP is a pure python VoIP/SIP/RTP library.  Currently, it supports PCMA, PCMU, and telephone-event.
 
-Please note this is is still in development and can only originate calls with PCMU.  In future, it will be able to initiate calls in PCMA as well.
+Please note this is still in development.
 
-This library does not depend on a sound library, i.e. you can use any sound library that can handle linear sound data i.e. pyaudio or even wave.  Keep in mind PCMU only supports 8000Hz, 1 channel, 8 bit, audio.
+This library does not depend on a sound library, i.e. you can use any sound library that can handle linear sound data i.e. pyaudio or even wave.  Keep in mind PCMU/PCMA only supports 8000Hz, 1 channel, 8 bit, audio.
 
 ## Getting Started
 Simply put pyVoIP into your site-packages folder.

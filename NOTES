@@ -1,12 +1,14 @@
-New in v1.0.0:
-Originate Calls
-Added blocking feature to readAudio, this makes readAudio not return until there is data to be returned.  If blocking is off and data is not available, bytes(length) will be returned.
-Now properly generating SIP tags to comply with the RFC.
-Other bug fixes
+New in v1.5.0:
+Fixed bug where pyVoIP would accept all codecs proposed by the server even if not compatible.  Will now only accept PCMU, PCMA, and telephone-event.
+Added handling of Native Bridging tested with Asterisk 16 SIP re-invite (External RTP bridge), this seems to still have issues with Asterisk 18, but unsure if it's my hardphone.
+Changed the audio read function in RTP to return b'\x80'*length instead of bytes(length), doing so stops the popping on the client side when no audio is being written.
+Fixed issue with ending phone calls originated by user.
+Added handling of 404 Not Found and 503 Service Unavailable errors.
+Added compatiblity with Asterisk PJSIP.
+Fixed bug with multithreaded calling.
 
 Currently Known Issues:
-BYE request on originated calls causes a 500 Error on Asterisk 13 (other versions not tested).  Unsure what causes this, reach out if you have a fix.
-Currently does not work with PJSIP (Only tested with Asterisk 18)
+Some issues with bridiging with Asterisk 18, and possible other versions.  Bridging is not supported by all phones so it's unclear if it's supported by the softphone and hardphone I use to do my tests.
 
 Upcoming patches/changes:
-Adjust code to be compatible with Asterisk PJSIP.
+Add support for CANCEL requests.

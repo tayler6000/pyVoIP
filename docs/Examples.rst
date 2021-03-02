@@ -23,8 +23,8 @@ The following will create a phone that answers and automatically hangs up:
     except InvalidStateError:
       pass
   
-  if __name__=='__main__':
-    phone=VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, callCallback=answer, myIP=<Your computer's local IP>)
+  if __name__ == '__main__':
+    phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, callCallback=answer, myIP=<Your computer's local IP>)
     phone.start()
     input('Press enter to disable the phone')
     phone.stop()
@@ -37,13 +37,12 @@ Let's say you want to make a phone that when you call it, it plays an announceme
 .. code-block:: python
 
   from pyVoIP.VoIP import VoIPPhone, InvalidStateError, CallState
-  import audioop
   import time
   import wave
   
   def answer(call):
     try:
-      f=wave.open('announcment.wav', 'rb')
+      f = wave.open('announcment.wav', 'rb')
       frames = f.getnframes()
       data = f.readframes(frames)
       f.close()
@@ -61,7 +60,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
     except:
       call.hangup()
       
-  if __name__=='__main__':
+  if __name__ == '__main__':
     phone=VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, callCallback=answer, myIP=<Your computers local IP>)
     phone.start()
     input('Press enter to disable the phone')
@@ -88,13 +87,12 @@ We can use the above code to create `IVR Menus <https://en.wikipedia.org/wiki/In
 .. code-block:: python
 
   from pyVoIP.VoIP import VoIPPhone, InvalidStateError, CallState
-  import audioop
   import time
   import wave
   
   def answer(call):
     try:
-      f=wave.open('prompt.wav', 'rb')
+      f = wave.open('prompt.wav', 'rb')
       frames = f.getnframes()
       data = f.readframes(frames)
       f.close()
@@ -116,7 +114,7 @@ We can use the above code to create `IVR Menus <https://en.wikipedia.org/wiki/In
     except:
       call.hangup()
       
-  if __name__=='__main__':
+  if __name__ == '__main__':
     phone=VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, callCallback=answer, myIP=<Your computers local IP>)
     phone.start()
     input('Press enter to disable the phone')
