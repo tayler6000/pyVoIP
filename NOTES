@@ -4,11 +4,12 @@ Added handling of Native Bridging tested with Asterisk 16 SIP re-invite (Externa
 Changed the audio read function in RTP to return b'\x80'*length instead of bytes(length), doing so stops the popping on the client side when no audio is being written.
 Fixed issue with ending phone calls originated by user.
 Added handling of 404 Not Found and 503 Service Unavailable errors.
-Added compatiblity with Asterisk PJSIP.
+Added compatibility with Asterisk PJSIP.
 Fixed bug with multithreaded calling.
 
 Currently Known Issues:
-Some issues with bridiging with Asterisk 18, and possible other versions.  Bridging is not supported by all phones so it's unclear if it's supported by the softphone and hardphone I use to do my tests.
+Some issues with bridging with Asterisk 18, and possibly other versions.  Bridging is not supported by all phones so it's unclear if it's supported by the softphone and hardphone I use to do my tests.
 
 Upcoming patches/changes:
 Add support for CANCEL requests.
+Add support for 603 Decline Responses
