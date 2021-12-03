@@ -1,3 +1,6 @@
+Fixes in v1.5.1:
+Fixed issue #2 pointed out by rushant001.
+
 New in v1.5.0:
 Fixed bug where pyVoIP would accept all codecs proposed by the server even if not compatible.  Will now only accept PCMU, PCMA, and telephone-event.
 Added handling of Native Bridging tested with Asterisk 16 SIP re-invite (External RTP bridge), this seems to still have issues with Asterisk 18, but unsure if it's my hardphone.

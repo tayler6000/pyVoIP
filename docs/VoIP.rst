@@ -135,5 +135,5 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
     This method ends all currently ongoing calls, then stops the :ref:`SIPClient` class
   
   **call**\ (number)
-    Originates a call using PCMU and telephone-event. The *number* argument must be a string, and it returns a :ref:`VoIPCall` class in CallState.DIALING.  You should use a while loop to wait until the CallState is ANSWRED. **NOTE:** In testing with Asterisk 13, calls made this way could not hangup.  This issue may exist on other PBXs as well.
+    Originates a call using PCMU and telephone-event. The *number* argument must be a string, and it returns a :ref:`VoIPCall` class in CallState.DIALING.  You should use a while loop to wait until the CallState is ANSWRED.
   
