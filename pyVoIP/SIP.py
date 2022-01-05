@@ -6,6 +6,7 @@ import socket
 import random
 import re
 import time
+import uuid
 
 __all__ = ['Counter', 'InvalidAccountInfoError', 'SIPClient', 'SIPMessage', 'SIPMessageType', 'SIPParseError', 'SIPStatus']
 debug = pyVoIP.debug
@@ -27,6 +28,9 @@ class Counter():
         
     def next(self):
         return self.count()
+        
+    def current(self):
+        return self.x
 
 class SIPStatus(IntEnum):
         def __new__(cls, value, phrase, description=''):
@@ -199,8 +203,11 @@ class SIPMessage():
         return data
         
     def parse(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        try:
+            headers, body = data.split(b'\r\n\r\n')
+        except ValueError as ve:
+            print('Error unpacking data, only using header')
+            headers = data.split(b'\r\n\r\n')[0]
         
         headers_raw = headers.split(b'\r\n')
         heading = headers_raw.pop(0)
@@ -422,8 +429,7 @@ class SIPMessage():
             self.body[header] = data        
             
     def parseSIPResponse(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        headers, body = data.split(b'\r\n\r\n')
         
         headers_raw = headers.split(b'\r\n')
         self.heading = headers_raw.pop(0)
@@ -451,8 +457,7 @@ class SIPMessage():
                     self.parseBody(i[0], i[1])
         
     def parseSIPMessage(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        headers, body = data.split(b'\r\n\r\n')
         
         headers_raw = headers.split(b'\r\n')
         self.heading = headers_raw.pop(0)
@@ -498,6 +503,8 @@ class SIPClient():
         
         self.myPort = myPort
         
+        self.default_expires = 300
+        
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
         self.byeCounter = Counter()
@@ -513,9 +520,12 @@ class SIPClient():
             self.s.setblocking(False)
             try:
                 raw = self.s.recv(8192)
-                message = SIPMessage(raw)
-                debug(message.summary())
-                self.parseMessage(message)
+                if raw != b'\x00\x00\x00\x00':
+                    message = SIPMessage(raw)
+                    debug(message.summary())
+                    self.parseMessage(message)
+                #if raw == b'\x00\x00\x00\x00':
+                #    print('Got keep alive')
             except BlockingIOError:
                 self.s.setblocking(True)
                 self.recvLock.release()
@@ -588,6 +598,9 @@ class SIPClient():
     def genCallID(self):
         return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
     
+    def lastCallID(self):
+        return hashlib.sha256(str(self.callID.current() - 1).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
+    
     def genTag(self):
         while True:
             tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
@@ -615,6 +628,34 @@ class SIPClient():
         response = hashlib.md5(HA1+b':'+nonce+b':'+HA2).hexdigest().encode('utf8')
         
         return response
+    
+    def genBranch(self, length=32):
+        '''
+        generate unique branch id  according to https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
+        '''
+        branchid = uuid.uuid4().hex[:length]
+        return f"z9hG4bK{branchid}"
+    
+    def genFirstRequest(self):
+        regRequest  = f'REGISTER sip:{self.server} SIP/2.0\r\n'
+        regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
+        regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.genTag()}\r\n' 
+        regRequest += f'To: "{self.username}" <sip:{self.username}@{self.server}>\r\n'
+        regRequest += f'Call-ID: {self.genCallID()}\r\n'
+        regRequest += f'CSeq: {self.registerCounter.next()} REGISTER\r\n' 
+        #TODO: find out if ;+sip.instance="<urn:uuid:...>" parameter should be generated?? and used^^
+        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>\r\n'
+        regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
+        regRequest += f'Max-Forwards: 70\r\n' 
+        regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
+        regRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' 
+        #Supported: 100rel, replaces, from-change, gruu 
+        regRequest += f'Expires: {self.default_expires}\r\n' 
+        regRequest += 'Content-Length: 0'
+        regRequest += '\r\n\r\n'
+        
+        
+        return regRequest
     
     def genRegister(self, request):
         response = self.genAuthorization(request)
@@ -841,6 +882,7 @@ class SIPClient():
 
     def deregister(self):
         self.recvLock.acquire()
+        #TODO: imlplement like register. check if From tag needs to be the same as last register action
         fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
         
         regRequest = self.genRegister(fake).replace('Expires: 300', 'Expires: 0')
@@ -870,31 +912,40 @@ class SIPClient():
         
     def register(self):
         self.recvLock.acquire()
-        fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
-        
-        regRequest = self.genRegister(fake)
-        
-        
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
+        firstRequest = self.genFirstRequest()
+        self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
         
         response = SIPMessage(self.s.recv(8192))
-
-        if response.status != SIPStatus(401):
+        
+        if response.status == SIPStatus(401):
+            #Unauthorized
+            #TODO: implement
+            print('Client unauthorized')
+        
+        if response.status == SIPStatus(407):
+            #Proxy Authentication Required
+            #TODO: implement
+            print('Proxy auth required')
+        
+        #TODO: This must be done more reliable
+        if response.status not in [SIPStatus(400),SIPStatus(401),SIPStatus(407)]:
+            #Unauthorized
             if response.status == SIPStatus(500):
                 self.recvLock.release()
                 time.sleep(5)
                 return self.register()
             else:
                 self.parseMessage(response)
-        
+            
         #debug(response.summary())
         #debug(response.raw)
         
+        '''
+        ###Reregister again why???
         regRequest = self.genRegister(response)
-        
         self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
-        
         response = SIPMessage(self.s.recv(8192))
+        '''
         self.recvLock.release()
         if response.status == SIPStatus.OK:
             if self.NSD:

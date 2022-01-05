@@ -8,10 +8,10 @@ __version__ = ".".join([str(x) for x in version_info])
 DEBUG = False
 
 def debug(s, e=None):
-  if DEBUG:
-    print(s)
-  elif e is not None:
-    print(e)
+    if DEBUG:
+        print(s)
+    elif e is not None:
+        print(e)
 
 from pyVoIP.RTP import PayloadType
 
