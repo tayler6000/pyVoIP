@@ -471,7 +471,11 @@ class SIPMessage():
         
         for x in headers_raw:
             i = str(x, 'utf8').split(': ')
-            headers[i[0]] = i[1]
+            #only use first occurance of header field; when testing with phonerlite and kamailio got two vias fro unknown reason yet
+            if i[0] in headers.keys():
+                print(f'Caution got duplicate header field {i[0]}')
+            if i[0] not in headers.keys():
+                headers[i[0]] = i[1]
             
         for x in headers:
             self.parseHeader(x, headers[x])
@@ -499,7 +503,7 @@ class SIPClient():
         self.callCallback=callCallback
         
         self.tags = []
-        self.tagLibrary = {}
+        self.tagLibrary = {'register':self.genTag()}
         
         self.myPort = myPort
         
@@ -507,9 +511,12 @@ class SIPClient():
         
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
+        self.subscribeCounter = Counter()
         self.byeCounter = Counter()
         self.callID = Counter()
         self.sessID = Counter()
+        
+        self.urnUUID = self.genURNUUDI()
         
         self.registerThread = None
         self.recvLock = Lock()
@@ -636,15 +643,20 @@ class SIPClient():
         branchid = uuid.uuid4().hex[:length]
         return f"z9hG4bK{branchid}"
     
+    def genURNUUDI(self):
+        '''
+        generate client instance specific urn:uuid
+        '''
+        return str(uuid.uuid4()).upper()
+    
     def genFirstRequest(self):
         regRequest  = f'REGISTER sip:{self.server} SIP/2.0\r\n'
         regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
-        regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.genTag()}\r\n' 
+        regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.tagLibrary["register"]}\r\n' 
         regRequest += f'To: "{self.username}" <sip:{self.username}@{self.server}>\r\n'
         regRequest += f'Call-ID: {self.genCallID()}\r\n'
         regRequest += f'CSeq: {self.registerCounter.next()} REGISTER\r\n' 
-        #TODO: find out if ;+sip.instance="<urn:uuid:...>" parameter should be generated?? and used^^
-        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>\r\n'
+        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += f'Max-Forwards: 70\r\n' 
         regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
@@ -654,8 +666,26 @@ class SIPClient():
         regRequest += 'Content-Length: 0'
         regRequest += '\r\n\r\n'
         
-        
         return regRequest
+    
+    def genSubscribe(self, response):
+        subRequest  = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
+        subRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
+        subRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.genTag()}\r\n'  
+        subRequest += f'To: <sip:{self.username}@{self.server}>\r\n' 
+        subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
+        subRequest += f'CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n'
+        #TODO: check if transport is needed 
+        subRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        subRequest += f'Max-Forwards: 70\r\n'
+        subRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n'
+        subRequest += f'Expires: {self.default_expires*2}\r\n'
+        subRequest += 'Event: message-summary\r\n'
+        subRequest += 'Accept: application/simple-message-summary'
+        subRequest += 'Content-Length: 0'
+        subRequest += '\r\n\r\n'
+        
+        return subRequest
     
     def genRegister(self, request):
         response = self.genAuthorization(request)
@@ -882,7 +912,7 @@ class SIPClient():
 
     def deregister(self):
         self.recvLock.acquire()
-        #TODO: imlplement like register. check if From tag needs to be the same as last register action
+        #TODO: imlplement like register. check if From tag needs to be the same as last register action >>> it should
         fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
         
         regRequest = self.genRegister(fake).replace('Expires: 300', 'Expires: 0')
@@ -917,6 +947,12 @@ class SIPClient():
         
         response = SIPMessage(self.s.recv(8192))
         
+        if response.status == SIPStatus(400):
+            #Bad Request
+            #TODO: implement
+            #TODO: check if broken connection can be brought back with new urn:uuid or reply with expire 0
+            print('Bad Request')
+        
         if response.status == SIPStatus(401):
             #Unauthorized
             #TODO: implement
@@ -935,20 +971,16 @@ class SIPClient():
                 time.sleep(5)
                 return self.register()
             else:
+                #TODO: determine if needed here
                 self.parseMessage(response)
             
         #debug(response.summary())
         #debug(response.raw)
         
-        '''
-        ###Reregister again why???
-        regRequest = self.genRegister(response)
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
-        response = SIPMessage(self.s.recv(8192))
-        '''
         self.recvLock.release()
         if response.status == SIPStatus.OK:
             if self.NSD:
+                self.subscribe(response)
                 self.registerThread = Timer(295, self.register)
                 self.registerThread.name = "SIP Register"
                 self.registerThread.start()
@@ -956,4 +988,17 @@ class SIPClient():
         else:
             raise InvalidAccountInfoError("Invalid Username or Password for SIP server "+self.server+':'+str(self.myPort))
         
+    def subscribe(self, lastresponse):
+        #TODO: check if needed and maybe implement fully
+        self.recvLock.acquire()
         
+        subRequest = self.genSubscribe(lastresponse)
+        self.out.sendto(subRequest.encode('utf8'), (self.server, self.port))
+        
+        response = SIPMessage(self.s.recv(8192))
+        
+        print(f'Got response to subscribe: {response.heading}')
+        
+        self.recvLock.release()
+        
+        return
