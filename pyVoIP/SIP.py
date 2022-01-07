@@ -427,7 +427,34 @@ class SIPMessage():
             
         else:
             self.body[header] = data        
+    
+    @staticmethod
+    def parseRawHeader(headers_raw, handle):
+        headers = {}
+        #only use first occurance of VIA header field; got second VIA from Kamailio running in DOCKER
+        #according to RFC 3261 these messages should be discarded in a response
+        for x in headers_raw:
+            i = str(x, 'utf8').split(': ')
             
+            if i[0] in headers.keys() and i[0] == 'VIA':
+                print(f'Caution got duplicate {i[0]} header field {i[0]}')
+            if i[0] not in headers.keys():
+                headers[i[0]] = i[1]
+        
+        for key, val in headers.items():
+            handle(key, val)
+    
+    @staticmethod
+    def parseRawBody(body, handle):
+        if len(body)>0:
+            body_raw = body.split(b'\r\n')
+            body_tags={}
+            for x in body_raw:
+                i = str(x, 'utf8').split('=')
+                if i != ['']:
+                    handle(i[0], i[1])
+        
+        
     def parseSIPResponse(self, data):
         headers, body = data.split(b'\r\n\r\n')
         
@@ -439,22 +466,9 @@ class SIPMessage():
             
         self.status = SIPStatus(int(self.heading.split(b" ")[1]))
         
-        headers = {}
+        self.parseRawHeader(headers_raw, self.parseHeader)
         
-        for x in headers_raw:
-            i = str(x, 'utf8').split(': ')
-            headers[i[0]] = i[1]
-            
-        for x in headers:
-            self.parseHeader(x, headers[x])
-        
-        if len(body)>0:
-            body_raw = body.split(b'\r\n')
-            body_tags={}
-            for x in body_raw:
-                i = str(x, 'utf8').split('=')
-                if i != ['']:
-                    self.parseBody(i[0], i[1])
+        self.parseRawBody(body, self.parseBody)
         
     def parseSIPMessage(self, data):
         headers, body = data.split(b'\r\n\r\n')
@@ -467,26 +481,9 @@ class SIPMessage():
             
         self.method = str(self.heading.split(b" ")[0], 'utf8')
         
-        headers = {}
+        self.parseRawHeader(headers_raw, self.parseHeader)
         
-        for x in headers_raw:
-            i = str(x, 'utf8').split(': ')
-            #only use first occurance of header field; when testing with phonerlite and kamailio got two vias fro unknown reason yet
-            if i[0] in headers.keys():
-                print(f'Caution got duplicate header field {i[0]}')
-            if i[0] not in headers.keys():
-                headers[i[0]] = i[1]
-            
-        for x in headers:
-            self.parseHeader(x, headers[x])
-            
-        if len(body)>0:
-            body_raw = body.split(b'\r\n')
-            body_tags={}
-            for x in body_raw:
-                i = str(x, 'utf8').split('=')
-                if i != ['']:
-                    self.parseBody(i[0], i[1])
+        self.parseRawBody(body, self.parseBody)
             
 class SIPClient():
     def __init__(self, server, port, username, password, myIP=None, myPort=5060, callCallback=None):
