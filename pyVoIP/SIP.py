@@ -504,7 +504,7 @@ class SIPClient():
         
         self.myPort = myPort
         
-        self.default_expires = 300
+        self.default_expires = 120
         
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
@@ -943,7 +943,8 @@ class SIPClient():
         self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
         
         response = SIPMessage(self.s.recv(8192))
-        
+        if response.status == SIPStatus.TRYING:
+            response = SIPMessage(self.s.recv(8192))
         if response.status == SIPStatus(400):
             #Bad Request
             #TODO: implement
@@ -977,8 +978,8 @@ class SIPClient():
         self.recvLock.release()
         if response.status == SIPStatus.OK:
             if self.NSD:
-                self.subscribe(response)
-                self.registerThread = Timer(295, self.register)
+                #self.subscribe(response)
+                self.registerThread = Timer(self.default_expires - 5, self.register)
                 self.registerThread.name = "SIP Register"
                 self.registerThread.start()
             return True
