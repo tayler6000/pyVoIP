@@ -7,6 +7,7 @@ import random
 import re
 import time
 import uuid
+import select
 
 __all__ = ['Counter', 'InvalidAccountInfoError', 'SIPClient', 'SIPMessage', 'SIPMessageType', 'SIPParseError', 'SIPStatus']
 debug = pyVoIP.debug
@@ -505,6 +506,7 @@ class SIPClient():
         self.myPort = myPort
         
         self.default_expires = 120
+        self.register_timeout = 30
         
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
@@ -583,14 +585,17 @@ class SIPClient():
             debug("TODO: Add 400 Error on non processable request")
     
     def start(self):
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.s.bind((self.myIP, self.myPort))
-        self.out = self.s
-        register = self.register()
-        t = Timer(1, self.recv)
-        t.name = "SIP Recieve"
-        t.start()
+        try:
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            #self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.s.bind((self.myIP, self.myPort))
+            self.out = self.s
+            register = self.register()
+            t = Timer(1, self.recv)
+            t.name = "SIP Recieve"
+            t.start()
+        except Exception as ex:
+            print(ex)
          
     def stop(self):
         self.NSD = False
@@ -941,8 +946,16 @@ class SIPClient():
         self.recvLock.acquire()
         firstRequest = self.genFirstRequest()
         self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
+
+        self.out.setblocking(0)
         
-        response = SIPMessage(self.s.recv(8192))
+        ready = select.select([self.out], [], [], self.register_timeout)
+        if ready[0]:
+            resp = self.s.recv(8192)
+        else:
+            raise TimeoutError('Registering on SIP Server timed out')
+
+        response = SIPMessage(resp)
         if response.status == SIPStatus.TRYING:
             response = SIPMessage(self.s.recv(8192))
         if response.status == SIPStatus(400):
