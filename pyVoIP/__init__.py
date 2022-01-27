@@ -5,7 +5,7 @@ version_info = (1, 5, 1)
 
 __version__ = ".".join([str(x) for x in version_info])
 
-DEBUG = False
+DEBUG = True
 
 def debug(s, e=None):
     if DEBUG:
@@ -15,7 +15,7 @@ def debug(s, e=None):
 
 from pyVoIP.RTP import PayloadType
 
-SIPCompatibleMethods = ['INVITE', 'ACK', 'BYE']
+SIPCompatibleMethods = ['INVITE', 'ACK', 'BYE','CANCEL']
 SIPCompatibleVersions = ['SIP/2.0']
 
 RTPCompatibleVersions = [2]
