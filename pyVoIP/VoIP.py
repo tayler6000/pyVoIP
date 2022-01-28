@@ -115,13 +115,16 @@ class VoIPCall():
                         self.phone.assignedPorts.append(proposed)
                         self.assignedPorts[proposed] = codecs
                         port = proposed
-                for ii in range(len(request.body['c'])):
-                    self.RTPClients.append(RTP.RTPClient(codecs, self.myIP, port, request.body['c'][ii]['address'], i['port']+ii, self.sendmode, dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
+                self.createRTPClients(codecs, self.myIP, port, request, i['port'])
         elif callstate == CallState.DIALING:
             self.ms = ms
             for m in self.ms:
                 self.port = m
                 self.assignedPorts[m] = self.ms[m]
+
+    def createRTPClients(self, codecs, ip, port, request, baseport):
+        for ii in range(len(request.body['c'])):
+            self.RTPClients.append(RTP.RTPClient(codecs, ip, port, request.body['c'][ii]['address'], baseport+ii, self.sendmode, dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
 
     def dtmfCallback(self, code):
         self.dtmfLock.acquire()
@@ -138,6 +141,7 @@ class VoIPCall():
         return packet
 
     def genMs(self): #For answering originally and for re-negotiations
+        #TODO: this seems "dangerous" if for some reason sip server handles 2 and more bindings it will cause duplicate RTP-Clients to spawn
         m = {}
         for x in self.RTPClients:
             x.start()
@@ -181,11 +185,10 @@ class VoIPCall():
                         e = True
             
             if e:
-                raise RTP.ParseError("RTP Payload type {} not found.".format(str(pt)))
+                raise RTP.RTPParseError("RTP Payload type {} not found.".format(str(p)))
             
             
-            for ii in range(len(request.body['c'])):
-                self.RTPClients.append(RTP.RTPClient(assoc, self.myIP, self.port, request.body['c'][ii]['address'], i['port']+ii, self.sendmode, dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
+            self.createRTPClients(assoc, self.myIP, self.port, request, i['port'])
         
         for x in self.RTPClients:
             x.start()
@@ -307,7 +310,10 @@ class VoIPPhone():
         call_id = request.headers['Call-ID']
         if call_id in self.calls:
             debug("Re-negotiation detected!")
-            self.calls[call_id].renegotiate(request)
+            #TODO: this seems "dangerous" if for some reason sip server handles 2 and more bindings it will cause duplicate RTP-Clients to spawn
+            #CallState.Ringing seems important here to prevent multiple answering and RTP-Client spawning. Find out when renegotiation is relevant
+            if self.calls[call_id].state != CallState.RINGING:
+                self.calls[call_id].renegotiate(request)
             return #Raise Error
         if self.callCallback == None:
             message = self.sip.genBusy(request)
@@ -344,6 +350,7 @@ class VoIPPhone():
         if not call_id in self.calls:
             debug("Unknown/No call")
             return
+        #TODO: Somehow never is reached. Find out if you have a network issue here or your invite is wrong
         self.calls[call_id].answered(request)
         debug("Answered")
         ack = self.sip.genAck(request)
