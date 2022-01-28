@@ -239,7 +239,7 @@ class SIPMessage():
                         _via[x.split('=')[0]] = x.split('=')[1]
                     else:
                         _via[x] = None
-                self.headers['Via'].append(_via) #TODO: should be appen to list
+                self.headers['Via'].append(_via)
         elif header=="From" or header=="To":
             info = data.split(';tag=')
             tag = ''
@@ -493,14 +493,13 @@ class SIPMessage():
         self.parseRawBody(body, self.parseBody)
             
 class SIPClient():
-    def __init__(self, server, port, username, password, myIP=None, myPort=5060, callCallback=None):
+    def __init__(self, server, port, username, password, myIP, myPort=5060, callCallback=None):
         self.NSD = True
         self.server = server
         self.port = port
         self.hostname = socket.gethostname()
         self.myIP = socket.gethostbyname(self.hostname)
-        if myIP!=None:
-            self.myIP = myIP
+        self.myIP = myIP
         self.username = username
         self.password = password
         
@@ -585,7 +584,13 @@ class SIPClient():
         elif message.method == "BYE":
             self.callCallback(message)
             response = self.genOk(message)
-            self.out.sendto(response.encode('utf8'), (self.server, self.port))
+            try:
+                #BYE comes from client cause server only acts as mediator
+                _sender_adress, _sender_port = message.headers['Via'][0]['address']
+                self.out.sendto(response.encode('utf8'), (_sender_adress, int(_sender_port)))
+            except Exception as ex:
+                debug('BYE Answer failed falling back to server as target')
+                self.out.sendto(response.encode('utf8'), (self.server, self.port))
         elif message.method == "ACK":
             return
         elif message.method == "CANCEL":
@@ -659,7 +664,7 @@ class SIPClient():
         '''
         return str(uuid.uuid4()).upper()
     
-    def genFirstRequest(self):
+    def genFirstRequest(self, deregister = False):
         regRequest  = f'REGISTER sip:{self.server} SIP/2.0\r\n'
         regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
         regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.tagLibrary["register"]}\r\n' 
@@ -672,7 +677,7 @@ class SIPClient():
         regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
         regRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' 
         #Supported: 100rel, replaces, from-change, gruu 
-        regRequest += f'Expires: {self.default_expires}\r\n' 
+        regRequest += f'Expires: {self.default_expires if not deregister else 0}\r\n' 
         regRequest += 'Content-Length: 0'
         regRequest += '\r\n\r\n'
         
@@ -935,19 +940,23 @@ class SIPClient():
     
     def bye(self, request):
         message = self.genBye(request)
+        #TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode('utf8'), (self.server, self.port))
 
     def deregister(self):
         self.recvLock.acquire()
-        #TODO: imlplement like register. check if From tag needs to be the same as last register action >>> it should
-        fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
+        firstRequest = self.genFirstRequest(deregister=True)
+        self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
         
-        regRequest = self.genRegister(fake).replace('Expires: 300', 'Expires: 0')
+        self.out.setblocking(0)
         
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
+        ready = select.select([self.out], [], [], self.register_timeout)
+        if ready[0]:
+            resp = self.s.recv(8192)
+        else:
+            raise TimeoutError('Registering on SIP Server timed out')
         
-        response = SIPMessage(self.s.recv(8192))
-        
+        response = SIPMessage(resp)
         
         while response.status != SIPStatus(401):
             if response.status == SIPStatus(500):
@@ -958,11 +967,6 @@ class SIPClient():
                 self.parseMessage(response)
             response = SIPMessage(self.s.recv(8192))
         
-        regRequest = self.genRegister(response).replace('Expires: 300', 'Expires: 0')
-        
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
-        
-        response = SIPMessage(self.s.recv(8192))
         if response.status==SIPStatus.OK:
             return True
         self.recvLock.release()

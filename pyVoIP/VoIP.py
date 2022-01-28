@@ -242,7 +242,8 @@ class VoIPCall():
             for x in self.RTPClients:
                 x.stop()
             self.state = CallState.ENDED
-        del self.phone.calls[self.request.headers['Call-ID']]
+        if self.request.headers['Call-ID'] in self.phone.calls:
+            del self.phone.calls[self.request.headers['Call-ID']]
         
     def writeAudio(self, data):
         for x in self.RTPClients:
@@ -261,7 +262,7 @@ class VoIPCall():
             
 
 class VoIPPhone():
-    def __init__(self, server, port, username, password, callCallback=None, myIP=None, sipPort=5060, rtpPortLow=10000, rtpPortHigh=20000):
+    def __init__(self, server, port, username, password, myIP, callCallback=None, sipPort=5060, rtpPortLow=10000, rtpPortHigh=20000):
         if rtpPortLow > rtpPortHigh:
             raise InvalidRangeError("'rtpPortHigh' must be >= 'rtpPortLow'")
             
@@ -275,8 +276,7 @@ class VoIPPhone():
         self.port = port
         self.hostname = socket.gethostname()
         self.myIP = socket.gethostbyname(self.hostname)
-        if myIP!=None:
-            self.myIP = myIP
+        self.myIP = myIP
         self.username = username
         self.password = password
         self.callCallback = callCallback
@@ -288,72 +288,96 @@ class VoIPPhone():
         self.sip = SIP.SIPClient(server, port, username, password, myIP=self.myIP, myPort=sipPort, callCallback=self.callback)
         
     def callback(self, request):
-        call_id = request.headers['Call-ID']
         #debug("Callback: "+request.summary())
         if request.type == pyVoIP.SIP.SIPMessageType.MESSAGE:
             #debug("This is a message")
             if request.method == "INVITE":
-                if call_id in self.calls:
-                    debug("Re-negotiation detected!")
-                    self.calls[call_id].renegotiate(request)
-                    #message = self.sip.genAnswer(request, self.calls[call_id].session_id, self.calls[call_id].genMs(), self.sendmode)
-                    #self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-                    return #Raise Error
-                if self.callCallback == None:
-                    message = self.sip.genBusy(request)
-                    self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-                else:
-                    debug("New call!")
-                    sess_id = None
-                    while sess_id == None:
-                        proposed = random.randint(1, 100000)
-                        if not proposed in self.session_ids:
-                            self.session_ids.append(proposed)
-                            sess_id = proposed
-                    message = self.sip.genRinging(request)
-                    self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-                    self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP, portRange=(self.rtpPortLow, self.rtpPortHigh), sendmode=self.recvmode)
-                    try:
-                        t = Timer(1, self.callCallback, [self.calls[call_id]])
-                        t.name = "Phone Call: "+call_id
-                        t.start()
-                    except Exception as e:
-                        message = self.sip.genBusy(request)
-                        self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-                        raise e
+                self._callback_MSG_Invite(request)
             elif request.method == "BYE":
-                    if not call_id in self.calls:
-                        return
-                    self.calls[call_id].bye()
+                self._callback_MSG_Bye(request)
         else:
             if request.status == SIP.SIPStatus.OK:
-                debug("OK recieved")
-                if not call_id in self.calls:
-                    debug("Unknown/No call")
-                    return
-                self.calls[call_id].answered(request)
-                debug("Answered")
-                ack = self.sip.genAck(request)
-                self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+                self._callback_RESP_OK(request)
             elif request.status == SIP.SIPStatus.NOT_FOUND:
-                debug("Not Found recieved, invalid number called?")
-                if not call_id in self.calls:
-                    debug("Unkown/No call")
-                    debug("TODO: Add 481 here as server is probably waiting for an ACK")
-                self.calls[call_id].notFound(request)
-                debug("Terminating Call")
-                ack = self.sip.genAck(request)
-                self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+                self._callback_RESP_NotFound(request)
             elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
-                debug("Service Unavailable recieved")
-                if not call_id in self.calls:
-                    debug("Unkown call")
-                    debug("TODO: Add 481 here as server is probably waiting for an ACK")
-                self.calls[call_id].unavailable(request)
-                debug("Terminating Call")
-                ack = self.sip.genAck(request)
-                self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
-        
+                self._callback_RESP_Unavailable(request)
+    
+    def _callback_MSG_Invite(self, request):
+        call_id = request.headers['Call-ID']
+        if call_id in self.calls:
+            debug("Re-negotiation detected!")
+            self.calls[call_id].renegotiate(request)
+            return #Raise Error
+        if self.callCallback == None:
+            message = self.sip.genBusy(request)
+            self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
+        else:
+            debug("New call!")
+            sess_id = None
+            while sess_id == None:
+                proposed = random.randint(1, 100000)
+                if not proposed in self.session_ids:
+                    self.session_ids.append(proposed)
+                    sess_id = proposed
+            message = self.sip.genRinging(request)
+            self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
+            self._create_Call(request, sess_id)
+            try:
+                t = Timer(1, self.callCallback, [self.calls[call_id]])
+                t.name = "Phone Call: "+call_id
+                t.start()
+            except Exception as e:
+                message = self.sip.genBusy(request)
+                self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
+                raise e
+    def _callback_MSG_Bye(self, request):
+        debug("BYE recieved")
+        call_id = request.headers['Call-ID']
+        if not call_id in self.calls:
+            return
+        self.calls[call_id].bye()
+    
+    def _callback_RESP_OK(self, request):
+        debug("OK recieved")
+        call_id = request.headers['Call-ID']
+        if not call_id in self.calls:
+            debug("Unknown/No call")
+            return
+        self.calls[call_id].answered(request)
+        debug("Answered")
+        ack = self.sip.genAck(request)
+        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+    
+    def _callback_RESP_NotFound(self,request):
+        debug("Not Found recieved, invalid number called?")
+        call_id = request.headers['Call-ID']
+        if not call_id in self.calls:
+            debug("Unkown/No call")
+            debug("TODO: Add 481 here as server is probably waiting for an ACK")
+        self.calls[call_id].notFound(request)
+        debug("Terminating Call")
+        ack = self.sip.genAck(request)
+        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+    
+    def _callback_RESP_Unavailable(self, request):
+        debug("Service Unavailable recieved")
+        call_id = request.headers['Call-ID']
+        if not call_id in self.calls:
+            debug("Unkown call")
+            debug("TODO: Add 481 here as server is probably waiting for an ACK")
+        self.calls[call_id].unavailable(request)
+        debug("Terminating Call")
+        ack = self.sip.genAck(request)
+        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+    
+    def _create_Call(self, request, sess_id):
+        '''
+        create VoIP cal object. Should be separated to enable better subclassing
+        '''
+        call_id = request.headers['Call-ID']
+        self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP, portRange=(self.rtpPortLow, self.rtpPortHigh), sendmode=self.recvmode)
+    
     def start(self):
         self.sip.start()
         
