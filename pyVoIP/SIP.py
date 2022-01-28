@@ -6,6 +6,8 @@ import socket
 import random
 import re
 import time
+import uuid
+import select
 
 __all__ = ['Counter', 'InvalidAccountInfoError', 'SIPClient', 'SIPMessage', 'SIPMessageType', 'SIPParseError', 'SIPStatus']
 debug = pyVoIP.debug
@@ -27,6 +29,9 @@ class Counter():
         
     def next(self):
         return self.count()
+        
+    def current(self):
+        return self.x
 
 class SIPStatus(IntEnum):
         def __new__(cls, value, phrase, description=''):
@@ -176,7 +181,7 @@ class SIPMessage():
         self.heading = ""
         self.type = None
         self.status = 0
-        self.headers = {}
+        self.headers = {'Via':[]}
         self.body = {}
         self.authentication = {}
         self.raw = data
@@ -199,8 +204,11 @@ class SIPMessage():
         return data
         
     def parse(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        try:
+            headers, body = data.split(b'\r\n\r\n')
+        except ValueError as ve:
+            print(f'Error unpacking data, only using header: {ve}')
+            headers = data.split(b'\r\n\r\n')[0]
         
         headers_raw = headers.split(b'\r\n')
         heading = headers_raw.pop(0)
@@ -217,13 +225,21 @@ class SIPMessage():
         
     def parseHeader(self, header, data):
         if header=="Via":
-            info = re.split(" |;", data)
-            self.headers['Via'] = {'type': info[0], 'address':(info[1].split(':')[0], info[1].split(':')[1])}
-            for x in info[2:]: #Sets branch, maddr, ttl, received, and rport if defined as per RFC 3261 20.7
-                if '=' in x:
-                    self.headers['Via'][x.split('=')[0]] = x.split('=')[1]
-                else:
-                    self.headers['Via'][x] = None
+            for d in data:
+                info = re.split(" |;", d)
+                _type = info[0] #SIP Method
+                _address = info[1].split(':') #Tuple: address, port
+                _ip = _address[0]
+                #if no port is provided in via header assume default port
+                #needs to be str. check response build for better str creation
+                _port = info[1].split(':')[1] if len(_address) > 1 else "5060"
+                _via =  {'type': _type, 'address':(_ip, _port)}
+                for x in info[2:]: #Sets branch, maddr, ttl, received, and rport if defined as per RFC 3261 20.7
+                    if '=' in x:
+                        _via[x.split('=')[0]] = x.split('=')[1]
+                    else:
+                        _via[x] = None
+                self.headers['Via'].append(_via)
         elif header=="From" or header=="To":
             info = data.split(';tag=')
             tag = ''
@@ -419,11 +435,35 @@ class SIPMessage():
                 self.body[header] = data
             
         else:
-            self.body[header] = data        
-            
+            self.body[header] = data
+    
+    @staticmethod
+    def parseRawHeader(headers_raw, handle):
+        headers = {'Via':[]}
+        #only use first occurance of VIA header field; got second VIA from Kamailio running in DOCKER
+        #according to RFC 3261 these messages should be discarded in a response
+        for x in headers_raw:
+            i = str(x, 'utf8').split(': ')
+            if i[0] == 'Via':
+                headers['Via'].append(i[1])
+            if i[0] not in headers.keys():
+                headers[i[0]] = i[1]
+        
+        for key, val in headers.items():
+            handle(key, val)
+    
+    @staticmethod
+    def parseRawBody(body, handle):
+        if len(body)>0:
+            body_raw = body.split(b'\r\n')
+            for x in body_raw:
+                i = str(x, 'utf8').split('=')
+                if i != ['']:
+                    handle(i[0], i[1])
+        
+        
     def parseSIPResponse(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        headers, body = data.split(b'\r\n\r\n')
         
         headers_raw = headers.split(b'\r\n')
         self.heading = headers_raw.pop(0)
@@ -433,26 +473,12 @@ class SIPMessage():
             
         self.status = SIPStatus(int(self.heading.split(b" ")[1]))
         
-        headers = {}
+        self.parseRawHeader(headers_raw, self.parseHeader)
         
-        for x in headers_raw:
-            i = str(x, 'utf8').split(': ')
-            headers[i[0]] = i[1]
-            
-        for x in headers:
-            self.parseHeader(x, headers[x])
-        
-        if len(body)>0:
-            body_raw = body.split(b'\r\n')
-            body_tags={}
-            for x in body_raw:
-                i = str(x, 'utf8').split('=')
-                if i != ['']:
-                    self.parseBody(i[0], i[1])
+        self.parseRawBody(body, self.parseBody)
         
     def parseSIPMessage(self, data):
-        headers = data.split(b'\r\n\r\n')[0]
-        body = data.split(b'\r\n\r\n')[1]
+        headers, body = data.split(b'\r\n\r\n')
         
         headers_raw = headers.split(b'\r\n')
         self.heading = headers_raw.pop(0)
@@ -462,47 +488,39 @@ class SIPMessage():
             
         self.method = str(self.heading.split(b" ")[0], 'utf8')
         
-        headers = {}
+        self.parseRawHeader(headers_raw, self.parseHeader)
         
-        for x in headers_raw:
-            i = str(x, 'utf8').split(': ')
-            headers[i[0]] = i[1]
-            
-        for x in headers:
-            self.parseHeader(x, headers[x])
-            
-        if len(body)>0:
-            body_raw = body.split(b'\r\n')
-            body_tags={}
-            for x in body_raw:
-                i = str(x, 'utf8').split('=')
-                if i != ['']:
-                    self.parseBody(i[0], i[1])
+        self.parseRawBody(body, self.parseBody)
             
 class SIPClient():
-    def __init__(self, server, port, username, password, myIP=None, myPort=5060, callCallback=None):
+    def __init__(self, server, port, username, password, myIP, myPort=5060, callCallback=None):
         self.NSD = True
         self.server = server
         self.port = port
         self.hostname = socket.gethostname()
         self.myIP = socket.gethostbyname(self.hostname)
-        if myIP!=None:
-            self.myIP = myIP
+        self.myIP = myIP
         self.username = username
         self.password = password
         
         self.callCallback=callCallback
         
         self.tags = []
-        self.tagLibrary = {}
+        self.tagLibrary = {'register':self.genTag()}
         
         self.myPort = myPort
         
+        self.default_expires = 120
+        self.register_timeout = 30
+        
         self.inviteCounter = Counter()
         self.registerCounter = Counter()
+        self.subscribeCounter = Counter()
         self.byeCounter = Counter()
         self.callID = Counter()
         self.sessID = Counter()
+        
+        self.urnUUID = self.genURNUUDI()
         
         self.registerThread = None
         self.recvLock = Lock()
@@ -513,9 +531,13 @@ class SIPClient():
             self.s.setblocking(False)
             try:
                 raw = self.s.recv(8192)
-                message = SIPMessage(raw)
-                debug(message.summary())
-                self.parseMessage(message)
+                if raw != b'\x00\x00\x00\x00':
+                    try:
+                        message = SIPMessage(raw)
+                        debug(message.summary())
+                        self.parseMessage(message)
+                    except Exception as ex:
+                        print(f'Error on header parsing: {ex}')
             except BlockingIOError:
                 self.s.setblocking(True)
                 self.recvLock.release()
@@ -562,9 +584,19 @@ class SIPClient():
         elif message.method == "BYE":
             self.callCallback(message)
             response = self.genOk(message)
-            self.out.sendto(response.encode('utf8'), (self.server, self.port))
+            try:
+                #BYE comes from client cause server only acts as mediator
+                _sender_adress, _sender_port = message.headers['Via'][0]['address']
+                self.out.sendto(response.encode('utf8'), (_sender_adress, int(_sender_port)))
+            except Exception as ex:
+                debug('BYE Answer failed falling back to server as target')
+                self.out.sendto(response.encode('utf8'), (self.server, self.port))
         elif message.method == "ACK":
             return
+        elif message.method == "CANCEL":
+            self.callCallback(message)
+            response = self.genOk(message)
+            self.out.sendto(response.encode('utf8'), (self.server, self.port))
         else:
             debug("TODO: Add 400 Error on non processable request")
     
@@ -588,6 +620,9 @@ class SIPClient():
     def genCallID(self):
         return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
     
+    def lastCallID(self):
+        return hashlib.sha256(str(self.callID.current() - 1).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
+    
     def genTag(self):
         while True:
             tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
@@ -597,7 +632,7 @@ class SIPClient():
     
     def genSIPVersionNotSupported(self, request):
         regRequest = "SIP/2.0 505 SIP Version Not Supported\r\n"
-        regRequest += "Via: SIP/2.0/UDP "+request.headers['Via']['address'][0]+":"+request.headers['Via']['address'][1]+";branch="+request.headers['Via']['branch']+"\r\n"
+        regRequest += self.__genResponseViaHeader(request)
         regRequest += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
         regRequest += "To: "+request.headers['To']['raw']+";tag="+self.genTag()+"\r\n"
         regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
@@ -615,6 +650,57 @@ class SIPClient():
         response = hashlib.md5(HA1+b':'+nonce+b':'+HA2).hexdigest().encode('utf8')
         
         return response
+    
+    def genBranch(self, length=32):
+        '''
+        generate unique branch id  according to https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
+        '''
+        branchid = uuid.uuid4().hex[:length]
+        return f"z9hG4bK{branchid}"
+    
+    def genURNUUDI(self):
+        '''
+        generate client instance specific urn:uuid
+        '''
+        return str(uuid.uuid4()).upper()
+    
+    def genFirstRequest(self, deregister = False):
+        regRequest  = f'REGISTER sip:{self.server} SIP/2.0\r\n'
+        regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
+        regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.tagLibrary["register"]}\r\n' 
+        regRequest += f'To: "{self.username}" <sip:{self.username}@{self.server}>\r\n'
+        regRequest += f'Call-ID: {self.genCallID()}\r\n'
+        regRequest += f'CSeq: {self.registerCounter.next()} REGISTER\r\n' 
+        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
+        regRequest += f'Max-Forwards: 70\r\n' 
+        regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
+        regRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' 
+        #Supported: 100rel, replaces, from-change, gruu 
+        regRequest += f'Expires: {self.default_expires if not deregister else 0}\r\n' 
+        regRequest += 'Content-Length: 0'
+        regRequest += '\r\n\r\n'
+        
+        return regRequest
+    
+    def genSubscribe(self, response):
+        subRequest  = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
+        subRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
+        subRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.genTag()}\r\n'  
+        subRequest += f'To: <sip:{self.username}@{self.server}>\r\n' 
+        subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
+        subRequest += f'CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n'
+        #TODO: check if transport is needed 
+        subRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        subRequest += f'Max-Forwards: 70\r\n'
+        subRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n'
+        subRequest += f'Expires: {self.default_expires*2}\r\n'
+        subRequest += 'Event: message-summary\r\n'
+        subRequest += 'Accept: application/simple-message-summary'
+        subRequest += 'Content-Length: 0'
+        subRequest += '\r\n\r\n'
+        
+        return subRequest
     
     def genRegister(self, request):
         response = self.genAuthorization(request)
@@ -640,7 +726,7 @@ class SIPClient():
         
     def genBusy(self, request):
         regRequest = "SIP/2.0 486 Busy Here\r\n"
-        regRequest += "Via: SIP/2.0/UDP "+request.headers['Via']['address'][0]+":"+request.headers['Via']['address'][1]+";branch="+request.headers['Via']['branch']+"\r\n"
+        regRequest += self.__genResponseViaHeader(request)
         regRequest += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
         regRequest += "To: "+request.headers['To']['raw']+";tag="+self.genTag()+"\r\n"
         regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
@@ -655,7 +741,7 @@ class SIPClient():
         
     def genOk(self, request):
         okResponse = "SIP/2.0 200 OK\r\n"
-        okResponse += "Via: SIP/2.0/UDP "+request.headers['Via']['address'][0]+":"+request.headers['Via']['address'][1]+";branch="+request.headers['Via']['branch']+"\r\n"
+        okResponse += self.__genResponseViaHeader(request)
         okResponse += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
         okResponse += "To: "+request.headers['To']['raw']+";tag="+request.headers['To']['tag']+"\r\n"
         okResponse += "Call-ID: "+request.headers['Call-ID']+"\r\n"
@@ -669,7 +755,7 @@ class SIPClient():
     def genRinging(self, request):
         tag = self.genTag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
-        regRequest += "Via: SIP/2.0/UDP "+request.headers['Via']['address'][0]+":"+request.headers['Via']['address'][1]+";branch="+request.headers['Via']['branch']+"\r\n"
+        regRequest += self.__genResponseViaHeader(request)
         regRequest += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
         regRequest += "To: "+request.headers['To']['raw']+";tag="+tag+"\r\n"
         regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
@@ -707,7 +793,7 @@ class SIPClient():
         tag = self.tagLibrary[request.headers['Call-ID']]
         
         regRequest = "SIP/2.0 200 OK\r\n"
-        regRequest += "Via: SIP/2.0/UDP "+request.headers['Via']['address'][0]+":"+request.headers['Via']['address'][1]+";branch="+request.headers['Via']['branch']+"\r\n"
+        regRequest += self.__genResponseViaHeader(request)
         regRequest += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
         regRequest += "To: "+request.headers['To']['raw']+";tag="+tag+"\r\n"
         regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
@@ -764,7 +850,7 @@ class SIPClient():
     def genBye(self, request):
         tag = self.tagLibrary[request.headers['Call-ID']]
         byeRequest = "BYE "+request.headers['Contact'].strip('<').strip('>')+" SIP/2.0\r\n"
-        byeRequest += "Via: SIP/2.0/UDP "+self.myIP+":"+str(self.myPort)+";branch="+request.headers['Via']['branch']+"\r\n"
+        byeRequest += self.__genResponseViaHeader(request)
         if request.headers['From']['tag'] == tag:
             byeRequest += "From: "+request.headers['From']['raw']+";tag="+tag+"\r\n"
             byeRequest += "To: "+request.headers['To']['raw']+(";tag="+request.headers['To']['tag'] if request.headers['To']['tag'] != '' else '')+"\r\n"
@@ -783,7 +869,7 @@ class SIPClient():
     def genAck(self, request):
         tag = self.tagLibrary[request.headers['Call-ID']]
         ackMessage = "ACK "+request.headers['To']['raw'].strip('<').strip('>')+" SIP/2.0\r\n"
-        ackMessage += "Via: SIP/2.0/UDP "+self.myIP+":"+str(self.myPort)+";branch="+request.headers['Via']['branch']+"\r\n"
+        ackMessage += self.__genResponseViaHeader(request)
         ackMessage += "Max-Forwards: 70\r\n"
         ackMessage += "To: "+request.headers['To']['raw']+";tag="+request.headers['To']['tag']+"\r\n"
         ackMessage += "From: "+request.headers['From']['raw']+";tag="+tag+"\r\n"
@@ -793,6 +879,23 @@ class SIPClient():
         ackMessage += "Content-Length: 0\r\n\r\n"
         
         return ackMessage
+    
+    def __genResponseViaHeader(self, request):
+        via = ''
+        for h_via in request.headers['Via']:
+            v_line = f'Via: SIP/2.0/UDP {h_via["address"][0]}:{h_via["address"][1]}'
+            if 'branch' in h_via.keys():
+                v_line += f';branch={h_via["branch"]}'
+            if 'rport' in h_via.keys():
+                if h_via["rport"] != None:
+                    v_line += f';rport={h_via["rport"]}'
+                else:
+                    v_line += f';rport'
+            if 'received' in h_via.keys():
+                v_line += f';received={h_via["received"]}'
+            v_line += "\r\n"
+            via += v_line
+        return via
     
     def invite(self, number, ms, sendtype):
         branch = "z9hG4bK"+self.genCallID()[0:25]
@@ -837,18 +940,23 @@ class SIPClient():
     
     def bye(self, request):
         message = self.genBye(request)
+        #TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode('utf8'), (self.server, self.port))
 
     def deregister(self):
         self.recvLock.acquire()
-        fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
+        firstRequest = self.genFirstRequest(deregister=True)
+        self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
         
-        regRequest = self.genRegister(fake).replace('Expires: 300', 'Expires: 0')
+        self.out.setblocking(0)
         
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
+        ready = select.select([self.out], [], [], self.register_timeout)
+        if ready[0]:
+            resp = self.s.recv(8192)
+        else:
+            raise TimeoutError('Registering on SIP Server timed out')
         
-        response = SIPMessage(self.s.recv(8192))
-        
+        response = SIPMessage(resp)
         
         while response.status != SIPStatus(401):
             if response.status == SIPStatus(500):
@@ -859,50 +967,78 @@ class SIPClient():
                 self.parseMessage(response)
             response = SIPMessage(self.s.recv(8192))
         
-        regRequest = self.genRegister(response).replace('Expires: 300', 'Expires: 0')
-        
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
-        
-        response = SIPMessage(self.s.recv(8192))
         if response.status==SIPStatus.OK:
             return True
         self.recvLock.release()
         
     def register(self):
         self.recvLock.acquire()
-        fake = SIPMessage(b'SIP/2.0 401 Unauthorized\r\nVia: SIP/2.0/UDP 192.168.0.64:5060;received=192.168.0.64\r\nFrom: <sip:5555555@127.0.0.1;transport=UDP>;tag=b4dbea69\r\nTo: <sip:5555555@127.0.0.1;transport=UDP>;tag=as6845844a\r\nCall-ID: '+self.genCallID().encode('utf8')+b'\r\nCSeq: 25273 REGISTER\r\nServer: Asterisk PBX 16.2.1~dfsg-1+deb10u1\r\nAllow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE\r\nSupported: replaces, timer\r\nWWW-Authenticate: Digest algorithm=MD5, realm="asterisk", nonce="7140386d"\r\nContent-Length: 0\r\n\r\n')
+        firstRequest = self.genFirstRequest()
+        self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
         
-        regRequest = self.genRegister(fake)
+        self.out.setblocking(0)
         
+        ready = select.select([self.out], [], [], self.register_timeout)
+        if ready[0]:
+            resp = self.s.recv(8192)
+        else:
+            raise TimeoutError('Registering on SIP Server timed out')
         
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
+        response = SIPMessage(resp)
+        if response.status == SIPStatus.TRYING:
+            response = SIPMessage(self.s.recv(8192))
+        if response.status == SIPStatus(400):
+            #Bad Request
+            #TODO: implement
+            #TODO: check if broken connection can be brought back with new urn:uuid or reply with expire 0
+            print('Bad Request')
         
-        response = SIPMessage(self.s.recv(8192))
-
-        if response.status != SIPStatus(401):
+        if response.status == SIPStatus(401):
+            #Unauthorized
+            #TODO: implement
+            print('Client unauthorized')
+        
+        if response.status == SIPStatus(407):
+            #Proxy Authentication Required
+            #TODO: implement
+            print('Proxy auth required')
+        
+        #TODO: This must be done more reliable
+        if response.status not in [SIPStatus(400),SIPStatus(401),SIPStatus(407)]:
+            #Unauthorized
             if response.status == SIPStatus(500):
                 self.recvLock.release()
                 time.sleep(5)
                 return self.register()
             else:
+                #TODO: determine if needed here
                 self.parseMessage(response)
-        
+            
         #debug(response.summary())
         #debug(response.raw)
         
-        regRequest = self.genRegister(response)
-        
-        self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
-        
-        response = SIPMessage(self.s.recv(8192))
         self.recvLock.release()
         if response.status == SIPStatus.OK:
             if self.NSD:
-                self.registerThread = Timer(295, self.register)
-                self.registerThread.name = "SIP Register"
+                #self.subscribe(response)
+                self.registerThread = Timer(self.default_expires - 5, self.register)
+                self.registerThread.name = f"SIP Register CSeq: {self.registerCounter.x}"
                 self.registerThread.start()
             return True
         else:
             raise InvalidAccountInfoError("Invalid Username or Password for SIP server "+self.server+':'+str(self.myPort))
         
+    def subscribe(self, lastresponse):
+        #TODO: check if needed and maybe implement fully
+        self.recvLock.acquire()
         
+        subRequest = self.genSubscribe(lastresponse)
+        self.out.sendto(subRequest.encode('utf8'), (self.server, self.port))
+        
+        response = SIPMessage(self.s.recv(8192))
+        
+        print(f'Got response to subscribe: {response.heading}')
+        
+        self.recvLock.release()
+        
+        return
