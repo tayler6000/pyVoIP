@@ -20,11 +20,11 @@ import sphinx_rtd_theme
 # -- Project information -----------------------------------------------------
 
 project = 'pyVoIP'
-copyright = '2020, Sorta Strange Productions'
+copyright = '2021, Tayler Porter'
 author = 'Tayler J Porter'
 
 # The full version, including alpha/beta/rc tags
-release = '0.5.0 Beta'
+release = '1.6.0'
 
 master_doc = 'index'
 
