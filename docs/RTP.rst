@@ -30,10 +30,10 @@ RTP.\ **RTPProtocol**
     This means the audio should be sent with pure UDP.  Returns ``'udp'`` when string casted.
     
   RTPProtocol.\ **AVP**
-    This means the audio should be sent with RTP Audio/Video Protocol described in :rfc:3551. Returns ``'RTP/AVP'`` when string casted.
+    This means the audio should be sent with RTP Audio/Video Protocol described in :RFC:`3551`. Returns ``'RTP/AVP'`` when string casted.
     
   RTPProtocol.\ **SAVP**
-    This means the audio should be sent with RTP Secure Audio/Video Protocol described in :rfc:3711. Returns ``'RTP/SAVP'`` when string casted.
+    This means the audio should be sent with RTP Secure Audio/Video Protocol described in :RFC:`3711`. Returns ``'RTP/SAVP'`` when string casted.
     
 .. _transmittype:
     

@@ -24,7 +24,7 @@ Enums
 VoIP.\ **CallState**
   CallState is an Enum with four attributes.
   
-  CallState.\ **DIALING***
+  CallState.\ **DIALING**
     This CallState is used to describe when a :term:`user` has originated a call to a :term:`client`, but it has yet to be answered.
   
   CallState.\ **RINGING**
