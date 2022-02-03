@@ -619,6 +619,7 @@ class SIPClient():
   def genRegister(self, request):
     response = self.genAuthorization(request)
     nonce = request.authentication['nonce']
+    realm = request.authentication['realm']
     
     regRequest = "REGISTER sip:"+self.server
     regRequest += " SIP/2.0\r\nVia: SIP/2.0/UDP "+self.myIP+":"+str(self.myPort)
@@ -631,7 +632,7 @@ class SIPClient():
     regRequest += "\r\nCSeq: "+str(self.registerCounter.next())+" REGISTER"
     regRequest +="\r\nExpires: 300\r\nAllow: "+(", ".join(pyVoIP.SIPCompatibleMethods))+"\r\nUser-Agent: pyVoIP """+pyVoIP.__version__+"\r\n"
     regRequest += 'Authorization: Digest username="'+self.username
-    regRequest += '",realm="asterisk",nonce="'+nonce
+    regRequest += '",realm="+realm+",nonce="'+nonce
     regRequest += '",uri="sip:'+self.server
     regRequest += ';transport=UDP",response="'+str(response, 'utf8')
     regRequest += '",algorithm=MD5\r\n'+"Content-Length: 0\r\n\r\n"
@@ -820,8 +821,9 @@ class SIPClient():
     debug("Acknowledged")
     authhash = self.genAuthorization(response)
     nonce = response.authentication['nonce']
+    realm = response.authentication['realm']
     auth = 'Authorization: Digest username="'+self.username
-    auth += '",realm="asterisk",nonce="'+nonce
+    auth += '",realm="+realm+",nonce="'+nonce
     auth += '",uri="sip:'+self.server
     auth += ';transport=UDP",response="'+str(authhash, 'utf8')
     auth += '",algorithm=MD5\r\n'
