@@ -24,7 +24,7 @@ Enums
 ******
 
 SIP.\ **SIPMessageType**
-  SIPMessageType is an IntEnum with two attributes.  It's stored in ``SIPMessage.type`` to effectivly parse the message.
+  SIPMessageType is an IntEnum with two attributes.  It's stored in ``SIPMessage.type`` to effectively parse the message.
   
   SIPMessageType.\ **MESSAGE**
     This SIPMessageType is used to signify the message was a SIP request.

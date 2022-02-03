@@ -42,6 +42,26 @@ VoIP.\ **CallState**
     
     In this state, you can not use any functions.
 
+.. _phonestatus
+
+VoIP.\ **PhoneStatus**
+  PhoneStatus is an Enum with five attributes.
+
+  PhoneStatus.\ **INACTIVE**
+    This PhoneStatus is used when ``VoIPPhone.start()`` has not been called, or after the phone has fully stopped after calling ``VoIPPhone.stop()``.
+
+  PhoneStatus.\ **REGISTERING**
+    This PhoneStatus is used when ``VoIPPhone.start()`` has been called, but has not finished starting.
+
+  PhoneStatus.\ **REGISTERED**
+    This PhoneStatus is used when ``VoIPPhone`` has finished starting successfully, and is ready for use.
+
+  PhoneStatus.\ **DEREGISTERING**
+    This PhoneStatus is used when ``VoIPPhone.stop()`` has been called, but has not finished stopping.
+
+  PhoneStatus.\ **FAILED**
+    This PhoneStatus is used when ``VoIPPhone.start()``has been called, but failed to start due to an error.
+
 Classes
 ********
 
@@ -127,6 +147,9 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
     
   **callback**\ (request)
     This method is called by the :ref:`SIPClient` when an INVITE or BYE request is received.  This function then creates a :ref:`VoIPCall` or terminates it respectively.  When a VoIPCall is created, it will then pass it to the *callCallback* function as an argument.  If *callCallback* is set to None, this function replies as BUSY. **This function should not be called by the** :term:`user`.
+
+  **getStatus**\ ()
+    This method returns the :ref:`PhoneStatus<phonestatus>`.
     
   **start**\ ()
     This method starts the :ref:`SIPClient` class.
