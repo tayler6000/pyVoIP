@@ -1,3 +1,7 @@
+Fixes in v1.5.2:
+[FIXED] Fixed issue #10.
+[FIXED] Fixed documentation typos.
+
 Fixes in v1.5.1:
 Fixed issue #2 pointed out by rushant001.
 
@@ -9,9 +13,6 @@ Fixed issue with ending phone calls originated by user.
 Added handling of 404 Not Found and 503 Service Unavailable errors.
 Added compatibility with Asterisk PJSIP.
 Fixed bug with multithreaded calling.
-
-Currently Known Issues:
-Some issues with bridging with Asterisk 18, and possibly other versions.  Bridging is not supported by all phones so it's unclear if it's supported by the softphone and hardphone I use to do my tests.
 
 Upcoming patches/changes:
 Add support for CANCEL requests.
