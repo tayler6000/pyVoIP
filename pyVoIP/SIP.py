@@ -625,10 +625,17 @@ class SIPClient():
 
     def stop(self):
         self.NSD = False
-        self.registerThread.cancel()
-        self.deregister()
-        self.s.close()
-        self.out.close()
+        if self.registerThread:
+            #only run if registerThread exists
+            self.registerThread.cancel()
+            self.deregister()
+        self._closeSockets()
+    
+    def _closeSockets(self):
+        if self.s:
+            self.s.close()
+        if self.out:
+            self.out.close()
 
     def genCallID(self):
         return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
