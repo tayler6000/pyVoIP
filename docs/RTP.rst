@@ -1,14 +1,14 @@
 RTP - Real-time Transport Protocol
 ###################################
 
-The RTP module recives and transmits, sound and phone-event data for a particular phone call.
+The RTP module recives and transmits sound and phone-event data for a particular phone call.
 
 The RTP module has two methods that are used by various classes for packet parsing.
 
-RTP.\ **byte_to_bits**\ (byte)
+RTP.\ **byte_to_bits**\ (byte: bytes) -> str
   This method converts a single byte into an eight character string of ones and zeros.  The *byte* argument must be a single byte.
   
-RTP.\ **add_bytes**\ (bytes)
+RTP.\ **add_bytes**\ (bytes: bytes) -> int
   This method takes multiple bytes and adds them together into an integer.
   
 Errors
@@ -18,7 +18,7 @@ Errors
   This may be thrown when you try to int cast a dynamic PayloadType.  Most PayloadTypes have a number assigned in `RFC 3551 Section 6 <https://tools.ietf.org/html/rfc3551#section-6>`_.  However, some are considered to be 'dynamic' meaning the PBX/VoIP server will pick an available number, and define it.
   
 *exception* RTP.\ **RTPParseError**
-  This is thrown by :ref:`RTPMessage` is unable to parse a RTP message.  It may also be thrown by `RTPClient` when it's unable to encode or decode the RTP packet payload.
+  This is thrown by :ref:`RTPMessage` when unable to parse a RTP message.  It may also be thrown by `RTPClient` when it's unable to encode or decode the RTP packet payload.
 
 Enums
 *******
@@ -102,13 +102,13 @@ The RTPPacketManager class utilizes an ``io.ByteIO`` that stores either received
 
 RTP.\ **RTPPacketManager**\ ()
   
-  **read**\ (length=160)
-    Reads *length* bytes from the ByteIO.  This will always return the length requested, and will append ``b'\x00'``'s onto the end of the available bytes to achieve this length.
+  **read**\ (length=160) -> bytes
+    Reads *length* bytes from the ByteIO.  This will always return the length requested, and will append ``b'\x80'``'s onto the end of the available bytes to achieve this length.
     
-  **rebuild**\ (reset, offset=0, data=b'')
-    This rebuilds the ByteIO if packets are sent out of order.  Setting the argument *reset* to true will wipe all data in the ByteIO and insert in the data in the argument *data* at the position in the argument *offset*.
+  **rebuild**\ (reset: bool, offset=0, data=b'') -> None
+    This rebuilds the ByteIO if packets are sent out of order.  Setting the argument *reset* to ``True`` will wipe all data in the ByteIO and insert in the data in the argument *data* at the position in the argument *offset*.
     
-  **write**\ (offset, data)
+  **write**\ (offset: int, data: bytes) -> None
     Writes the data in the argument *data* to the ByteIO at the position in the argument *offset*.  RTP data comes with a timestamp that is passed as the offset in this case.  This makes it so a hole left by delayed packets can be filled later.  If a packet with a timestamp sooner than any other timestamp received, it will rebuild the ByteIO with the new data.  If this new position is over 100,000 bytes before the earliest byte, the ByteIO is completely wiped and starts over.  This is to prevent Overflow errors.
 
 .. _RTPMessage:
@@ -118,7 +118,7 @@ RTPMessage
 
 The RTPMessage class is used to parse RTP packets and makes them easily processed by the :ref:`RTPClient`.
 
-RTP.\ **RTPMessage**\ (data, assoc)
+RTP.\ **RTPMessage**\ (data: bytes, assoc: dict[int, :ref:`PayloadType<payload-type>`])
     
     The *data* argument is the received RTP packet in bytes.
     
@@ -159,10 +159,10 @@ RTP.\ **RTPMessage**\ (data, assoc)
     RTPMessage.\ **raw**
       This attribute is the unparsed version of the *data* argument, in bytes.
   
-  **summary**\ ()
+  **summary**\ () -> str
     This method returns a string representation of the RTP packet excluding the payload.
     
-  **parse**\ (data)
+  **parse**\ (data: bytes) -> None
     This method is called by the initialization of the class.  It determines the RTP version, whether the packet has padding, has a header extension, and other information about the backet.
 
 .. _RTPClient:
