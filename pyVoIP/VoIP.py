@@ -411,6 +411,7 @@ class VoIPPhone():
             self._status = PhoneStatus.REGISTERED
         except Exception:
             self._status = PhoneStatus.FAILED
+            self.sip.stop()
             raise
 
     def stop(self):
