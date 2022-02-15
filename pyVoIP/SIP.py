@@ -481,7 +481,7 @@ class SIPMessage():
       
 class SIPClient():
   def __init__(self, server, port, username, password, myIP=None, myPort=5060, callCallback=None):
-    self.NSD = True
+    self.NSD = False
     self.server = server
     self.port = port
     self.hostname = socket.gethostname()
@@ -569,6 +569,9 @@ class SIPClient():
       debug("TODO: Add 400 Error on non processable request")
   
   def start(self):
+    if self.NSD == True:
+      raise RunTimeError("Attempted to start already started SIPClient")
+    self.NSD = True
     self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     #self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.s.bind((self.myIP, self.myPort))
