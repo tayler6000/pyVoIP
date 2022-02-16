@@ -654,17 +654,19 @@ class SIPClient():
                 return tag
 
     def genSIPVersionNotSupported(self, request):
-        regRequest = "SIP/2.0 505 SIP Version Not Supported\r\n"
-        regRequest += self._genResponseViaHeader(request)
-        regRequest += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
-        regRequest += "To: "+request.headers['To']['raw']+";tag="+self.genTag()+"\r\n"
-        regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
-        regRequest += "CSeq: "+request.headers['CSeq']['check']+" "+request.headers['CSeq']['method']+"\r\n"
-        regRequest += "Contact: "+request.headers['Contact']+"\r\n" #TODO: Add Supported
-        regRequest += "User-Agent: pyVoIP """+pyVoIP.__version__+"\r\n"
-        regRequest += "Warning: 399 GS \"Unable to accept call\"\r\n"
-        regRequest += "Allow: "+(", ".join(pyVoIP.SIPCompatibleMethods))+"\r\n"
-        regRequest += "Content-Length: 0\r\n\r\n"
+        response = "SIP/2.0 505 SIP Version Not Supported\r\n"
+        response += self._genResponseViaHeader(request)
+        response += "From: "+request.headers['From']['raw']+";tag="+request.headers['From']['tag']+"\r\n"
+        response += "To: "+request.headers['To']['raw']+";tag="+self.genTag()+"\r\n"
+        response += "Call-ID: "+request.headers['Call-ID']+"\r\n"
+        response += "CSeq: "+request.headers['CSeq']['check']+" "+request.headers['CSeq']['method']+"\r\n"
+        response += "Contact: "+request.headers['Contact']+"\r\n" #TODO: Add Supported
+        response += "User-Agent: pyVoIP """+pyVoIP.__version__+"\r\n"
+        response += "Warning: 399 GS \"Unable to accept call\"\r\n"
+        response += "Allow: "+(", ".join(pyVoIP.SIPCompatibleMethods))+"\r\n"
+        response += "Content-Length: 0\r\n\r\n"
+
+        return response
 
     def genAuthorization(self, request):
         HA1 = hashlib.md5(self.username.encode('utf8')+b':'+request.authentication['realm'].encode('utf8')+b':'+self.password.encode('utf8')).hexdigest().encode('utf8')
