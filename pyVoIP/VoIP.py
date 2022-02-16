@@ -350,7 +350,11 @@ class VoIPPhone():
         self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
     
   def start(self):
-    self.sip.start()
+    try:
+      self.sip.start()
+    except Exception:
+      self.sip.stop()
+      raise
     
   def stop(self):
     for x in self.calls.copy():
