@@ -137,10 +137,18 @@ class VoIPCall():
                 self.assignedPorts[m] = self.ms[m]
 
     def createRTPClients(self, codecs, ip, port, request, baseport):
+        warnings.warn("createRTPClients is deprecated due to PEP8 compliance. Use create_rtp_clients instead.", DeprecationWarning, stacklevel=2)
+        return self.create_rtp_clients(codecs, ip, port, request, baseport)
+
+    def create_rtp_clients(self, codecs, ip, port, request, baseport):
         for ii in range(len(request.body['c'])):
             self.RTPClients.append(RTP.RTPClient(codecs, ip, port, request.body['c'][ii]['address'], baseport+ii, self.sendmode, dtmf=self.dtmfCallback)) #TODO: Check IPv4/IPv6
 
     def dtmfCallback(self, code):
+        warnings.warn("dtmfCallback is deprecated due to PEP8 compliance. Use dtmf_callback instead.", DeprecationWarning, stacklevel=2)
+        return self.dtmf_callback(code)
+
+    def dtmf_callback(self, code):
         self.dtmfLock.acquire()
         bufferloc = self.dtmf.tell()
         self.dtmf.seek(0, 2)
@@ -149,12 +157,20 @@ class VoIPCall():
         self.dtmfLock.release()
 
     def getDTMF(self, length=1):
+        warnings.warn("getDTMF is deprecated due to PEP8 compliance. Use get_dtmf instead.", DeprecationWarning, stacklevel=2)
+        return self.get_dmtf(length)
+
+    def get_dtmf(self, length=1):
         self.dtmfLock.acquire()
         packet = self.dtmf.read(length)
         self.dtmfLock.release()
         return packet
 
-    def genMs(self): #For answering originally and for re-negotiations
+    def genMs(self):
+        warnings.warn("genMs is deprecated due to PEP8 compliance. Use gen_ms instead.", DeprecationWarning, stacklevel=2)
+        return self.gen_ms()
+
+    def gen_ms(self): #For answering originally and for re-negotiations
         #TODO: this seems "dangerous" if for some reason sip server handles 2 and more bindings it will cause duplicate RTP-Clients to spawn
         m = {}
         for x in self.RTPClients:
@@ -210,6 +226,10 @@ class VoIPCall():
         self.state = CallState.ANSWERED
 
     def notFound(self, request):
+        warnings.warn("notFound is deprecated due to PEP8 compliance. Use not_found instead.", DeprecationWarning, stacklevel=2)
+        return self.not_found(request)
+
+    def not_found(self, request):
         if self.state != CallState.DIALING:
             debug(f"TODO: 500 Error, received a not found response for a call not in the dailing state.    Call: {self.call_id}, Call State: {self.state}")
             return
@@ -262,10 +282,18 @@ class VoIPCall():
             del self.phone.calls[self.request.headers['Call-ID']]
 
     def writeAudio(self, data):
+        warnings.warn("writeAudio is deprecated due to PEP8 compliance. Use write_audio instead.", DeprecationWarning, stacklevel=2)
+        return self.write_audio(data)
+
+    def write_audio(self, data):
         for x in self.RTPClients:
             x.write(data)
 
     def readAudio(self, length=160, blocking=True):
+        warnings.warn("readAudio is deprecated due to PEP8 compliance. Use read_audio instead.", DeprecationWarning, stacklevel=2)
+        return self.read_audio(length, blocking)
+
+    def read_audio(self, length=160, blocking=True):
         if len(self.RTPClients) == 1:
             return self.RTPClients[0].read(length, blocking)
         data = []
@@ -322,6 +350,10 @@ class VoIPPhone():
                 self._callback_RESP_Unavailable(request)
 
     def getStatus(self):
+        warnings.warn("getStatus is deprecated due to PEP8 compliance. Use get_status instead.", DeprecationWarning, stacklevel=2)
+        return self.get_status()
+
+    def get_status(self):
       return self._status
 
     def _callback_MSG_Invite(self, request):
