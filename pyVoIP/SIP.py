@@ -24,7 +24,7 @@ class SIPParseError(Exception):
     pass
 
 
-class Counter():
+class Counter:
 
     def __init__(self, start=1):
         self.x = start
@@ -186,7 +186,7 @@ class SIPMessageType(IntEnum):
     RESPONSE = 0
 
 
-class SIPMessage():
+class SIPMessage:
 
     def __init__(self, data):
         self.SIPCompatibleVersions = pyVoIP.SIPCompatibleVersions
@@ -201,6 +201,8 @@ class SIPMessage():
         self.parse(data)
 
     def summary(self):
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         data = ""
         if self.type == SIPMessageType.RESPONSE:
             data += "Status: " + str(int(self.status)) + " " + str(self.status.phrase) + "\n\n"
@@ -217,7 +219,8 @@ class SIPMessage():
         return data
 
     def parse(self, data):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start \n{data}\n")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         try:
             headers, body = data.split(b'\r\n\r\n')
         except ValueError as ve:
@@ -238,7 +241,7 @@ class SIPMessage():
             raise SIPParseError("Unable to decipher SIP request: " + str(heading, 'utf8'))
 
     def parseHeader(self, header, data):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start: \n{header} {data}\n")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         if header == "Via":
             for d in data:
                 info = re.split(" |;", d)
@@ -294,7 +297,8 @@ class SIPMessage():
             self.headers[header] = data
 
     def parseBody(self, header, data):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start \n{header} {data}\n")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if 'Content-Encoding' in self.headers:
             raise SIPParseError("Unable to parse encoded content.")
         if self.headers['Content-Type'] == 'application/sdp':
@@ -473,7 +477,7 @@ class SIPMessage():
 
     @staticmethod
     def parseRawHeader(headers_raw, handle):
-        debug(f"parseRawHeader start")
+        debug(f'SIPMessage.parseRawHeader start (staticmethod)')
         headers = {'Via': []}
         # only use first occurance of VIA header field; got second VIA from Kamailio running in DOCKER
         # according to RFC 3261 these messages should be discarded in a response
@@ -489,7 +493,7 @@ class SIPMessage():
 
     @staticmethod
     def parseRawBody(body, handle):
-        debug(f"parseRawBody start")
+        debug(f"SIPMessage.parseRawBody start (staticmethode)")
         if len(body) > 0:
             body_raw = body.split(b'\r\n')
             for x in body_raw:
@@ -498,7 +502,8 @@ class SIPMessage():
                     handle(i[0], i[1])
 
     def parseSIPResponse(self, data):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         headers, body = data.split(b'\r\n\r\n')
 
         headers_raw = headers.split(b'\r\n')
@@ -514,7 +519,8 @@ class SIPMessage():
         self.parseRawBody(body, self.parseBody)
 
     def parseSIPMessage(self, data):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start\n----\n{data}\n----\n')
         headers, body = data.split(b'\r\n\r\n')
 
         headers_raw = headers.split(b'\r\n')
@@ -530,7 +536,7 @@ class SIPMessage():
         self.parseRawBody(body, self.parseBody)
 
 
-class SIPClient():
+class SIPClient:
 
     def __init__(self, server, port, username, password, myIP, proxy, myPort=5060, callCallback=None):
         self.NSD = False
@@ -566,7 +572,8 @@ class SIPClient():
         self.recvLock = Lock()
 
     def recv(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         while self.NSD:
             self.recvLock.acquire()
             self.s.setblocking(False)
@@ -575,7 +582,7 @@ class SIPClient():
                 if raw != b'\x00\x00\x00\x00':
                     try:
                         message = SIPMessage(raw)
-                        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {message.summary()}")
+                        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} received message \n{message.summary()}\n")
                         self.parseMessage(message)
                     except Exception as ex:
                         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} Error on header parsing: {ex}')
@@ -589,9 +596,10 @@ class SIPClient():
                     request = self.genSIPVersionNotSupported(message)
                     self.out.sendto(request.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
                 else:
-                    debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
+                    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} SIPParseError in SIP.recv: {type(e)}, {e}")
             except Exception as e:
                 if pyVoIP.DEBUG:
+                    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Exception in SIP.recv: {type(e)}, {e}")
                     self.s.setblocking(True)
                     self.recvLock.release()
                     raise
@@ -600,7 +608,8 @@ class SIPClient():
             debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} End")
 
     def parseMessage(self, message):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if message.type != SIPMessageType.MESSAGE:
             if message.status == SIPStatus.OK:
                 if self.callCallback != None:
@@ -644,7 +653,8 @@ class SIPClient():
             debug("TODO: Add 400 Error on non processable request")
 
     def start(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if self.NSD == True:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
@@ -658,7 +668,8 @@ class SIPClient():
         t.start()
 
     def stop(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         self.NSD = False
         if self.registerThread:
             # Only run if registerThread exists
@@ -667,24 +678,27 @@ class SIPClient():
         self._closeSockets()
 
     def _closeSockets(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if self.s:
             self.s.close()
         if self.out:
             self.out.close()
 
     def genCallID(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
-        return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32] + "@" + self.myIP + ":" + str(
-            self.myPort)
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32] + "@" + self.myIP + ":" + str(self.myPort)
 
     def lastCallID(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         return hashlib.sha256(str(self.callID.current() - 1).encode('utf8')).hexdigest()[
                0:32] + "@" + self.myIP + ":" + str(self.myPort)
 
     def genTag(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         while True:
             tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
             if tag not in self.tags:
@@ -692,7 +706,8 @@ class SIPClient():
                 return tag
 
     def genSIPVersionNotSupported(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         response = "SIP/2.0 505 SIP Version Not Supported\r\n"
         response += self._genResponseViaHeader(request)
         response += "From: " + request.headers['From']['raw'] + ";tag=" + request.headers['From']['tag'] + "\r\n"
@@ -709,7 +724,8 @@ class SIPClient():
         return response
 
     def genAuthorization(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         HA1 = hashlib.md5(self.username.encode('utf8') + b':' + request.authentication['realm'].encode(
             'utf8') + b':' + self.password.encode('utf8')).hexdigest().encode('utf8')
         HA2 = hashlib.md5(request.headers['CSeq']['method'].encode('utf8') + b':sip:' + self.server.encode(
@@ -717,11 +733,12 @@ class SIPClient():
         nonce = request.authentication['nonce'].encode('utf8')
         response = hashlib.md5(HA1 + b':' + nonce + b':' + HA2).hexdigest().encode('utf8')
 
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} \n----\n {response} \n----\n")
+        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} authentication {response}")
         return response
 
     def genBranch(self, length=32):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         '''
         Generate unique branch id according to https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
         '''
@@ -729,14 +746,16 @@ class SIPClient():
         return f"z9hG4bK{branchid}"
 
     def genURNUUDI(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         '''
         Generate client instance specific urn:uuid
         '''
         return str(uuid.uuid4()).upper()
 
     def genFirstRequest(self, deregister=False):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         regRequest = f'REGISTER sip:{self.server} SIP/2.0\r\n'
         regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
         regRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.tagLibrary["register"]}\r\n'
@@ -757,7 +776,8 @@ class SIPClient():
         return regRequest
 
     def genSubscribe(self, response):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         subRequest = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
         subRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch={self.genBranch()};rport\r\n'
         subRequest += f'From: "{self.username}" <sip:{self.username}@{self.server}>;tag={self.genTag()}\r\n'
@@ -778,7 +798,8 @@ class SIPClient():
         return subRequest
 
     def genRegister(self, request, deregister=False):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         response = str(self.genAuthorization(request), 'utf8')
         nonce = request.authentication['nonce']
         realm = request.authentication['realm']
@@ -803,7 +824,8 @@ class SIPClient():
         return regRequest
 
     def genBusy(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         regRequest = "SIP/2.0 486 Busy Here\r\n"
         regRequest += self._genResponseViaHeader(request)
         regRequest += "From: " + request.headers['From']['raw'] + ";tag=" + request.headers['From']['tag'] + "\r\n"
@@ -820,7 +842,8 @@ class SIPClient():
         return regRequest
 
     def genOk(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         okResponse = "SIP/2.0 200 OK\r\n"
         okResponse += self._genResponseViaHeader(request)
         okResponse += "From: " + request.headers['From']['raw'] + ";tag=" + request.headers['From']['tag'] + "\r\n"
@@ -835,7 +858,8 @@ class SIPClient():
         return okResponse
 
     def genRinging(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         tag = self.genTag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._genResponseViaHeader(request)
@@ -854,7 +878,8 @@ class SIPClient():
         return regRequest
 
     def genAnswer(self, request, sess_id, ms, sendtype):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
         body += "o=pyVoIP " + sess_id + " " + str(
@@ -896,7 +921,8 @@ class SIPClient():
         return regRequest
 
     def genInvite(self, number, sess_id, ms, sendtype, branch, call_id):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
         body += "o=pyVoIP " + sess_id + " " + str(
@@ -939,7 +965,8 @@ class SIPClient():
         return invRequest
 
     def genBye(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         tag = self.tagLibrary[request.headers['Call-ID']]
         byeRequest = "BYE " + request.headers['Contact'].strip('<').strip('>') + " SIP/2.0\r\n"
         byeRequest += self._genResponseViaHeader(request)
@@ -961,7 +988,8 @@ class SIPClient():
         return byeRequest
 
     def genAck(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         tag = self.tagLibrary[request.headers['Call-ID']]
         ackMessage = "ACK " + request.headers['To']['raw'].strip('<').strip('>') + " SIP/2.0\r\n"
         ackMessage += self._genResponseViaHeader(request)
@@ -977,7 +1005,8 @@ class SIPClient():
         return ackMessage
 
     def _genResponseViaHeader(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         via = ''
         for h_via in request.headers['Via']:
             v_line = f'Via: SIP/2.0/UDP {h_via["address"][0]}:{h_via["address"][1]}'
@@ -995,7 +1024,8 @@ class SIPClient():
         return via
 
     def invite(self, number, ms, sendtype):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         branch = "z9hG4bK" + self.genCallID()[0:25]
         call_id = self.genCallID()
         sess_id = self.sessID.next()
@@ -1039,13 +1069,15 @@ class SIPClient():
         return SIPMessage(invite.encode('utf8')), call_id, sess_id
 
     def bye(self, request):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         message = self.genBye(request)
         # TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
     def deregister(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         self.recvLock.acquire()
         firstRequest = self.genFirstRequest(deregister=True)
         self.out.sendto(firstRequest.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
@@ -1091,10 +1123,11 @@ class SIPClient():
         self.recvLock.release()
 
     def register(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         self.recvLock.acquire()
         firstRequest = self.genFirstRequest()
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} firstRequest \n----\n {firstRequest} \n----\n")
+        # debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} firstRequest \n----\n {firstRequest} \n----\n")
         self.out.sendto(firstRequest.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
         self.out.setblocking(0)
@@ -1124,7 +1157,7 @@ class SIPClient():
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
-                debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} response \n----\n {response} \n----\n")
+                debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} response \n----\n {response.summary()} \n----\n")
                 if response.status == SIPStatus(401):
                     # At this point, it's reasonable to assume it's invalid credentials.
                     debug("Unauthorized")
@@ -1154,7 +1187,7 @@ class SIPClient():
                 # TODO: determine if needed here
                 self.parseMessage(response)
 
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {response.summary()}")
+        #debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {response.summary()}")
         debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {response.raw}")
 
         self.recvLock.release()
@@ -1170,22 +1203,20 @@ class SIPClient():
                 f"Invalid Username or Password for SIP server {self.server}:{str(self.myPort)}")
 
     def _handleBadRequest(self):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Bad Request
         # TODO: implement
         # TODO: check if broken connection can be brought back with new urn:uuid or reply with expire 0
         debug('Bad Request')
 
     def subscribe(self, lastresponse):
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} start")
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # TODO: check if needed and maybe implement fully
         self.recvLock.acquire()
-
         subRequest = self.genSubscribe(lastresponse)
         self.out.sendto(subRequest.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
-
         response = SIPMessage(self.s.recv(8192))
-
         debug(f'Got response to subscribe: {response.heading}')
-
         self.recvLock.release()
