@@ -144,7 +144,7 @@ class VoIPCall:
                 self.port = m
                 self.assignedPorts[m] = self.ms[m]
 
-    def createRTPClients(self, codecs, ip, port, request, baseport):
+    def create_rtp_clients(self, codecs, ip, port, request, baseport):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         for ii in range(len(request.body['c'])):
             if request.body['c'][ii]['address_type'] == 'IP4':
@@ -152,7 +152,7 @@ class VoIPCall:
                 self.RTPClients.append(RTP.RTPClient(codecs, ip, port, request.body['c'][ii]['address'], baseport+ii,
                                                      self.sendmode, dtmf=self.dtmfCallback))
 
-    def dtmfCallback(self, code):
+    def dtmf_callback(self, code):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         self.dtmfLock.acquire()
         bufferloc = self.dtmf.tell()
@@ -161,14 +161,14 @@ class VoIPCall:
         self.dtmf.seek(bufferloc, 0)
         self.dtmfLock.release()
 
-    def getDTMF(self, length=1):
+    def get_dtmf(self, length=1):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         self.dtmfLock.acquire()
         packet = self.dtmf.read(length)
         self.dtmfLock.release()
         return packet
 
-    def genMs(self):
+    def gen_ms(self): #For answering originally and for re-negotiations
         # For answering originally and for re-negotiations
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         # TODO: this seems "dangerous" if for some reason sip server handles 2 and
@@ -230,7 +230,7 @@ class VoIPCall:
         self.request.headers['To']['tag'] = request.headers['To']['tag']
         self.state = CallState.ANSWERED
 
-    def notFound(self, request):
+    def not_found(self, request):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         if self.state != CallState.DIALING:
             debug(f"TODO: 500 Error, received a not found response for a call not in the dailing state. "
@@ -295,12 +295,12 @@ class VoIPCall:
         if self.request.headers['Call-ID'] in self.phone.calls:
             del self.phone.calls[self.request.headers['Call-ID']]
 
-    def writeAudio(self, data):
+    def write_audio(self, data):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         for x in self.RTPClients:
             x.write(data)
 
-    def readAudio(self, length=160, blocking=True):
+    def read_audio(self, length=160, blocking=True):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         if len(self.RTPClients) == 1:
             return self.RTPClients[0].read(length, blocking)
@@ -358,7 +358,7 @@ class VoIPPhone:
             elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
                 self._callback_RESP_Unavailable(request)
 
-    def getStatus(self):
+    def get_status(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         return self._status
 

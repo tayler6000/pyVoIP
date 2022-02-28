@@ -8,6 +8,7 @@ import random
 import socket
 import threading
 import time
+import warnings
 
 __all__ = ['add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType', 'RTPParseError', 'RTPProtocol',
            'RTPPacketManager', 'RTPClient', 'TransmitType']
@@ -348,7 +349,7 @@ class RTPClient:
             self.outTimestamp += len(payload)
             time.sleep((1 / self.preference.rate) * 160)  # 1/8000 *160
 
-    def parsePacket(self, packet):
+   def parse_packet(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         packet = RTPMessage(packet, self.assoc)
@@ -361,7 +362,7 @@ class RTPClient:
         else:
             raise RTPParseError("Unsupported codec (parse): " + str(packet.payload_type))
 
-    def encodePacket(self, payload):
+    def encode_packet(self, payload):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if self.preference == PayloadType.PCMU:
@@ -371,35 +372,35 @@ class RTPClient:
         else:
             raise RTPParseError("Unsupported codec (encode): " + str(self.preference))
 
-    def parsePCMU(self, packet):
+    def parse_pcmu(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         data = audioop.ulaw2lin(packet.payload, 1)
         data = audioop.bias(data, 1, 128)
         self.pmin.write(packet.timestamp, data)
 
-    def encodePCMU(self, packet):
+    def encode_pcmu(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         packet = audioop.bias(packet, 1, -128)
         packet = audioop.lin2ulaw(packet, 1)
         return packet
 
-    def parsePCMA(self, packet):
+    def parse_pcma(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         data = audioop.alaw2lin(packet.payload, 1)
         data = audioop.bias(data, 1, 128)
         self.pmin.write(packet.timestamp, data)
 
-    def encodePCMA(self, packet):
+    def encode_pcma(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         packet = audioop.bias(packet, 1, -128)
         packet = audioop.lin2alaw(packet, 1)
         return packet
 
-    def parseTelephoneEvent(self, packet):
+    def parse_telephone_event(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         key = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '#', 'A', 'B', 'C', 'D']
