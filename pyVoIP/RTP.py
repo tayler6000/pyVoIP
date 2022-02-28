@@ -7,6 +7,7 @@ import random
 import socket
 import threading
 import time
+import warnings
 
 __all__ = ['add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType', 'RTPParseError', 'RTPProtocol', 'RTPPacketManager', 'RTPClient', 'TransmitType']
 debug = pyVoIP.debug
@@ -307,6 +308,10 @@ class RTPClient():
             time.sleep((1/self.preference.rate)*160) #1/8000 *160
         
     def parsePacket(self, packet):
+        warnings.warn("parsePacket is deprecated due to PEP8 compliance. Use parse_packet instead.", DeprecationWarning, stacklevel=2)
+        return self.parse_packet(packet)
+
+    def parse_packet(self, packet):
         packet = RTPMessage(packet, self.assoc)
         if packet.payload_type == PayloadType.PCMU:
             self.parsePCMU(packet)
@@ -318,6 +323,10 @@ class RTPClient():
             raise RTPParseError("Unsupported codec (parse): "+str(packet.payload_type))
     
     def encodePacket(self, payload):
+        warnings.warn("encodePacket is deprecated due to PEP8 compliance. Use encode_packet instead.", DeprecationWarning, stacklevel=2)
+        return self.encode_packet(payload)
+
+    def encode_packet(self, payload):
         if self.preference == PayloadType.PCMU:
             return self.encodePCMU(payload)
         elif self.preference == PayloadType.PCMA:
@@ -326,26 +335,46 @@ class RTPClient():
             raise RTPParseError("Unsupported codec (encode): "+str(self.preference))
     
     def parsePCMU(self, packet):
+        warnings.warn("parsePCMU is deprecated due to PEP8 compliance. Use parse_pcmu instead.", DeprecationWarning, stacklevel=2)
+        return self.parse_pcmu(packet)
+
+    def parse_pcmu(self, packet):
         data = audioop.ulaw2lin(packet.payload, 1)
         data = audioop.bias(data, 1, 128)
         self.pmin.write(packet.timestamp, data)
         
     def encodePCMU(self, packet):
+        warnings.warn("encodePCMU is deprecated due to PEP8 compliance. Use encode_pcmu instead.", DeprecationWarning, stacklevel=2)
+        return self.encode_pcmu(packet)
+
+    def encode_pcmu(self, packet):
         packet = audioop.bias(packet, 1, -128)
         packet = audioop.lin2ulaw(packet, 1)
         return packet
         
     def parsePCMA(self, packet):
+        warnings.warn("parsePCMA is deprecated due to PEP8 compliance. Use parse_pcma instead.", DeprecationWarning, stacklevel=2)
+        return self.parse_pcma(packet)
+
+    def parse_pcma(self, packet):
         data = audioop.alaw2lin(packet.payload, 1)
         data = audioop.bias(data, 1, 128)
         self.pmin.write(packet.timestamp, data)
         
     def encodePCMA(self, packet):
+        warnings.warn("encodePCMA is deprecated due to PEP8 compliance. Use encode_pcma instead.", DeprecationWarning, stacklevel=2)
+        return self.encode_pcma(packet)
+
+    def encode_pcma(self, packet):
         packet = audioop.bias(packet, 1, -128)
         packet = audioop.lin2alaw(packet, 1)
         return packet
 
     def parseTelephoneEvent(self, packet):
+        warnings.warn("parseTelephoneEvent is deprecated due to PEP8 compliance. Use parse_telephone_event instead.", DeprecationWarning, stacklevel=2)
+        return self.parse_telephone_event(packet)
+
+    def parse_telephone_event(self, packet):
         key = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '#', 'A', 'B', 'C', 'D']
         end = False
 
@@ -359,4 +388,3 @@ class RTPClient():
         if packet.marker:
             if self.dtmf != None:
                 self.dtmf(event)
-            
