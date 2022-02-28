@@ -17,7 +17,7 @@ def debug(s, e=None):
 
 from pyVoIP.RTP import PayloadType
 
-SIPCompatibleMethods = ['INVITE', 'ACK', 'BYE', 'CANCEL']
+SIPCompatibleMethods = ['INVITE', 'ACK', 'BYE', 'CANCEL', 'NOTIFY']
 SIPCompatibleVersions = ['SIP/2.0']
 
 RTPCompatibleVersions = [2]

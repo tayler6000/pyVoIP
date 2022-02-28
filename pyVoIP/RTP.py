@@ -8,7 +8,6 @@ import random
 import socket
 import threading
 import time
-import warnings
 
 __all__ = ['add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType', 'RTPParseError', 'RTPProtocol',
            'RTPPacketManager', 'RTPClient', 'TransmitType']
@@ -111,7 +110,9 @@ class PayloadType(Enum):
 
 class RTPPacketManager:
     def __init__(self):
-        self.offset = 4294967296  # The largest number storable in 4 bytes + 1.    This will ensure the offset adjustment in self.write(offset, data) works.
+        # The largest number storable in 4 bytes + 1.
+        # This will ensure the offset adjustment in self.write(offset, data) works.
+        self.offset = 4294967296
         self.buffer = io.BytesIO()
         self.bufferLock = threading.Lock()
         self.log = {}
@@ -152,12 +153,13 @@ class RTPPacketManager:
         self.log[offset] = data
         bufferloc = self.buffer.tell()
         if offset < self.offset:
-            reset = (
-                        abs(offset - self.offset) >= 100000)  # If the new timestamp is over 100,000 bytes before the earliest, erase the buffer.    This will stop memory errors.
+            # If the new timestamp is over 100,000 bytes before the earliest, erase the buffer.
+            # This will stop memory errors.
+            reset = (abs(offset - self.offset) >= 100000)
             self.offset = offset
             self.bufferLock.release()
-            self.rebuild(reset, offset,
-                         data)  # Rebuilds the buffer if something before the earliest timestamp comes in, this will stop overwritting.
+            # Rebuilds the buffer if something before the earliest timestamp comes in, this will stop overwriting.
+            self.rebuild(reset, offset, data)
             return
         offset = offset - self.offset
         self.buffer.seek(offset, 0)
@@ -242,8 +244,9 @@ class RTPClient:
             try:
                 if int(assoc[m]) is not None:
                     debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Selected {assoc[m]}")
-                    self.preference = assoc[
-                        m]  # Select the first available actual codec to encode with.    TODO: will need to change if video codecs are ever implemented.
+                    # Select the first available actual codec to encode with.
+                    # TODO: will need to change if video codecs are ever implemented.
+                    self.preference = assoc[m]
                     break
             except:
                 debug(
@@ -311,7 +314,7 @@ class RTPClient:
         while self.NSD:
             try:
                 packet = self.sin.recv(8192)
-                self.parsePacket(packet)
+                self.parse_packet(packet)
             except BlockingIOError:
                 time.sleep(0.01)
             except RTPParseError as e:
@@ -324,7 +327,7 @@ class RTPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         while self.NSD:
             payload = self.pmout.read()
-            payload = self.encodePacket(payload)
+            payload = self.encode_packet(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
             packet += chr(int(self.preference)).encode('utf8')
             try:
@@ -349,16 +352,16 @@ class RTPClient:
             self.outTimestamp += len(payload)
             time.sleep((1 / self.preference.rate) * 160)  # 1/8000 *160
 
-   def parse_packet(self, packet):
+    def parse_packet(self, packet):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         packet = RTPMessage(packet, self.assoc)
         if packet.payload_type == PayloadType.PCMU:
-            self.parsePCMU(packet)
+            self.parse_pcmu(packet)
         elif packet.payload_type == PayloadType.PCMA:
-            self.parsePCMA(packet)
+            self.parse_pcma(packet)
         elif packet.payload_type == PayloadType.EVENT:
-            self.parseTelephoneEvent(packet)
+            self.parse_telephone_event(packet)
         else:
             raise RTPParseError("Unsupported codec (parse): " + str(packet.payload_type))
 
@@ -366,9 +369,9 @@ class RTPClient:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if self.preference == PayloadType.PCMU:
-            return self.encodePCMU(payload)
+            return self.encode_pcmu(payload)
         elif self.preference == PayloadType.PCMA:
-            return self.encodePCMA(payload)
+            return self.encode_pcma(payload)
         else:
             raise RTPParseError("Unsupported codec (encode): " + str(self.preference))
 
