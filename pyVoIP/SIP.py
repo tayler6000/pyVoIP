@@ -124,8 +124,10 @@ class SIPStatus(IntEnum):
     USE_IDENTITY_HEADER = (428, 'Use Identity Header',
                            'The server requires an Identity header, and one has not been provided.')
     PROVIDE_REFERRER_IDENTITY = (429, 'Provide Referrer Identity')
+    # This response is intended for use between proxy devices, and should not be seen by an endpoint
+    # (and if it is seen by one, should be treated as a 400 Bad Request response).
     FLOW_FAILED = (430, 'Flow Failed',
-                   'A specific flow to a user agent has failed, although other flows may succeed.')  # This response is intended for use between proxy devices, and should not be seen by an endpoint (and if it is seen by one, should be treated as a 400 Bad Request response).
+                   'A specific flow to a user agent has failed, although other flows may succeed.')
     ANONYMITY_DISALLOWED = (433,
                             'Anonymity Disallowed')
     BAD_IDENTITY_INFO = (436, 'Bad Identity-Info')
@@ -297,8 +299,7 @@ class SIPMessage:
             self.headers[header] = data
 
     def parseBody(self, header, data):
-        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         if 'Content-Encoding' in self.headers:
             raise SIPParseError("Unable to parse encoded content.")
         if self.headers['Content-Type'] == 'application/sdp':
@@ -341,7 +342,8 @@ class SIPMessage:
                 # c=IN IP4 224.2.1.1/127
                 # c=IN IP4 224.2.1.2/127
                 # c=IN IP4 224.2.1.3/127
-                # With the TTL being 127.    IPv6 does not support time to live so you will only see a / for multicast addresses.
+                # With the TTL being 127. IPv6 does not support time to live so you
+                # will only see a / for multicast addresses.
                 if '/' in data[2]:
                     if data[1] == "IP6":
                         self.body[header].append(
@@ -438,7 +440,7 @@ class SIPMessage:
                     attribute = data
                     value = None
 
-                if value != None:
+                if value is not None:
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>]
                         value = re.split(" |/", value)
@@ -520,7 +522,8 @@ class SIPMessage:
 
     def parseSIPMessage(self, data):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start\n----\n{data}\n----\n')
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} '
+              f'start\n----\n{data}\n----\n')
         headers, body = data.split(b'\r\n\r\n')
 
         headers_raw = headers.split(b'\r\n')
@@ -599,7 +602,8 @@ class SIPClient:
                     debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} SIPParseError in SIP.recv: {type(e)}, {e}")
             except Exception as e:
                 if pyVoIP.DEBUG:
-                    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Exception in SIP.recv: {type(e)}, {e}")
+                    debug(f"\n------------------------\n{self.__class__.__name__}.{inspect.stack()[0][3]} "
+                          f"Exception in SIP.recv: {type(e)}, {e}\n------------------------\n")
                     self.s.setblocking(True)
                     self.recvLock.release()
                     raise
@@ -612,13 +616,13 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if message.type != SIPMessageType.MESSAGE:
             if message.status == SIPStatus.OK:
-                if self.callCallback != None:
+                if self.callCallback is not None:
                     self.callCallback(message)
             elif message.status == SIPStatus.NOT_FOUND:
-                if self.callCallback != None:
+                if self.callCallback is not None:
                     self.callCallback(message)
             elif message.status == SIPStatus.SERVICE_UNAVAILABLE:
-                if self.callCallback != None:
+                if self.callCallback is not None:
                     self.callCallback(message)
             elif message.status == SIPStatus.TRYING or message.status == SIPStatus.RINGING:
                 pass
@@ -628,7 +632,7 @@ class SIPClient:
             self.s.setblocking(True)
             return
         elif message.method == "INVITE":
-            if self.callCallback == None:
+            if self.callCallback is None:
                 request = self.genBusy(message)
                 self.out.sendto(request.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
             else:
@@ -655,7 +659,7 @@ class SIPClient:
     def start(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
-        if self.NSD == True:
+        if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -688,7 +692,8 @@ class SIPClient:
     def genCallID(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
-        return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32] + "@" + self.myIP + ":" + str(self.myPort)
+        return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[
+               0:32] + "@" + self.myIP + ":" + str(self.myPort)
 
     def lastCallID(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
@@ -820,7 +825,7 @@ class SIPClient:
         regRequest += 'Content-Length: 0'
         regRequest += '\r\n\r\n'
 
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} \n----\n {regRequest} \n----\n")
+        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} \n----\n{regRequest}\n----\n")
         return regRequest
 
     def genBusy(self, request):
@@ -1157,7 +1162,7 @@ class SIPClient:
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
-                debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} response \n----\n {response.summary()} \n----\n")
+                debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} response\n----\n{response.summary()}\n----\n")
                 if response.status == SIPStatus(401):
                     # At this point, it's reasonable to assume it's invalid credentials.
                     debug("Unauthorized")
@@ -1187,7 +1192,6 @@ class SIPClient:
                 # TODO: determine if needed here
                 self.parseMessage(response)
 
-        #debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {response.summary()}")
         debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {response.raw}")
 
         self.recvLock.release()
