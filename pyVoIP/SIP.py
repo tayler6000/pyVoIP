@@ -1522,12 +1522,12 @@ class SIPClient():
     def _handle_bad_request(self):
         # Bad Request
         # TODO: implement
-        # TODO: check if broken connection can be brought back 
+        # TODO: check if broken connection can be brought back
         # with new urn:uuid or reply with expire 0
         debug('Bad Request')
 
     def subscribe(self, lastresponse):
-        #TODO: check if needed and maybe implement fully
+        # TODO: check if needed and maybe implement fully
         self.recvLock.acquire()
 
         subRequest = self.genSubscribe(lastresponse)
