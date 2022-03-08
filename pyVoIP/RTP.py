@@ -1,5 +1,6 @@
 from enum import Enum
 from threading import Timer
+from typing import Union
 import audioop
 import io
 import pyVoIP
@@ -61,12 +62,13 @@ class TransmitType(Enum):
 
 class PayloadType(Enum):
 
-    def __new__(cls, value, clock, channel, description):
+    def __new__(cls, value: Union[int, str], clock: int = 0,
+                channel: int = 0, description: str = ""):
         obj = object.__new__(cls)
         obj._value_ = value
-        obj.rate = clock
-        obj.channel = channel
-        obj.description = description
+        setattr(obj, "rate", clock)
+        setattr(obj, "channel", channel)
+        setattr(obj, "description", description)
         return obj
 
     def __int__(self):
@@ -114,7 +116,7 @@ class PayloadType(Enum):
 
     # Non-codec
     EVENT = "telephone-event", 8000, 0, "telephone-event"
-    UNKOWN = "UNKOWN", 0, 0, "UNKOWN CODEC"
+    UNKNOWN = "UNKNOWN", 0, 0, "UNKNOWN CODEC"
 
 
 class RTPPacketManager():
