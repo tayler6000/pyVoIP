@@ -235,8 +235,8 @@ class RTPMessage:
 
 class RTPClient:
     def __init__(self, assoc, inIP, inPort, outIP, outPort, sendrecv, dtmf=None):
-        debug(
-            f"{self.__class__.__name__}.{inspect.stack()[0][3]} {assoc}, {inIP}, {inPort}, {outIP}, {outPort}, {sendrecv}, {dtmf}")
+        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {assoc}, {inIP}, {inPort}, {outIP}, "
+              f"{outPort}, {sendrecv}, {dtmf}")
         self.NSD = True
         self.assoc = assoc  # Example: {0: PayloadType.PCMU, 101: PayloadType.EVENT}
         debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Selecting audio codec for transmission")
@@ -324,7 +324,8 @@ class RTPClient:
 
     def trans(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start with '
+              f'outIP {self.outIP} outPort {self.outPort}')
         while self.NSD:
             payload = self.pmout.read()
             payload = self.encode_packet(payload)

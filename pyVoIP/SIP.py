@@ -1,3 +1,4 @@
+import traceback
 from enum import IntEnum
 from threading import Timer, Lock
 import inspect
@@ -9,7 +10,7 @@ import re
 import time
 import uuid
 import select
-import warnings
+import re
 
 __all__ = ['Counter', 'InvalidAccountInfoError', 'SIPClient', 'SIPMessage', 'SIPMessageType', 'SIPParseError',
            'SIPStatus']
@@ -267,7 +268,10 @@ class SIPMessage:
             if len(info) >= 2:
                 tag = info[1]
             raw = info[0]
-            contact = raw.split('<sip:')
+            # contact = raw.split('<sip:')
+            # For some header from / to are only sip:xxxx@xxxxxx not <sip:xxxxxxx@xxxxxxxxx>
+            # so changed raw.split to the regex version re.split
+            contact = re.split(r"<?sip:", raw)
             contact[0] = contact[0].strip('"').strip("'")
             address = contact[1].strip('>')
             if len(address.split('@')) == 2:
@@ -287,12 +291,11 @@ class SIPMessage:
             self.headers[header] = int(data)
         elif header == 'WWW-Authenticate' or header == "Authorization":
             data = data.replace("Digest", "")
-            # add blank to avois the split of qop="auth, auth-int"
+            # add blank to avoid the split of qop="auth, auth-int"
             info = data.split(", ")
             header_data = {}
             for x in info:
                 x = x.strip()
-                debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} x = {x}")
                 header_data[x.split('=')[0]] = x.split('=')[1].strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
@@ -549,6 +552,7 @@ class SIPClient:
         self.hostname = socket.gethostname()
         self.myIP = socket.gethostbyname(self.hostname)
         self.myIP = myIP
+        self.my_public_ip = None
         self.proxy = proxy
         self.username = username
         self.password = password
@@ -559,6 +563,7 @@ class SIPClient:
         self.tagLibrary = {'register': self.gen_tag()}
 
         self.myPort = myPort
+        self.my_public_port = None
 
         self.default_expires = 120
         self.register_timeout = 30
@@ -586,6 +591,12 @@ class SIPClient:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} --> receive message')
 
+    def get_my_ip(self):
+        return self.my_public_ip if self.myIP else self.myIP
+
+    def get_my_port(self):
+        return self.my_public_port if self.my_public_port else self.myPort
+
     def recv(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
@@ -600,7 +611,8 @@ class SIPClient:
                         message = SIPMessage(raw)
                         self.parse_message(message)
                     except Exception as ex:
-                        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} Error on header parsing: {ex}')
+                        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} Error on header parsing: {ex}'
+                              f'\n{traceback.format_exc()}')
             except BlockingIOError:
                 self.s.setblocking(True)
                 self.recvLock.release()
@@ -664,6 +676,10 @@ class SIPClient:
         elif message.method == "CANCEL":
             self.callCallback(message)
             response = self.gen_ok(message)
+            self.send_message(response)
+        elif message.method == "NOTIFY":
+            self.callCallback(message)
+            response = self.gen_notify(message)
             self.send_message(response)
         else:
             debug("TODO: Add 400 Error on non processable request")
@@ -731,7 +747,7 @@ class SIPClient:
         response += "To: "+request.headers['To']['raw']+";tag="+self.gen_tag()+"\r\n"
         response += "Call-ID: "+request.headers['Call-ID']+"\r\n"
         response += "CSeq: "+request.headers['CSeq']['check']+" "+request.headers['CSeq']['method']+"\r\n"
-        response += "Contact: "+request.headers['Contact']+"\r\n" #TODO: Add Supported
+        response += "Contact: "+request.headers['Contact']+"\r\n"  # TODO: Add Supported
         response += "User-Agent: pyVoIP """+pyVoIP.__version__+"\r\n"
         response += "Warning: 399 GS \"Unable to accept call\"\r\n"
         response += "Allow: " + (", ".join(pyVoIP.SIPCompatibleMethods)) + "\r\n"
@@ -777,7 +793,7 @@ class SIPClient:
         regRequest += f'To: "{self.username}" <sip:{self.username}@{self.server}>\r\n'
         regRequest += f'Call-ID: {self.gen_call_id()}\r\n'
         regRequest += f'CSeq: {self.registerCounter.next()} REGISTER\r\n'
-        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        regRequest += f'Contact: <sip:{self.get_my_ip()}:{self.get_my_port()};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += f'Max-Forwards: 70\r\n'
         regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
@@ -789,7 +805,7 @@ class SIPClient:
 
         return regRequest
 
-    def gen_subscribe(self, resonse):
+    def gen_subscribe(self, response):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         subRequest = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
@@ -799,7 +815,7 @@ class SIPClient:
         subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
         subRequest += f'CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n'
         # TODO: check if transport is needed
-        subRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        subRequest += f'Contact: <sip:{self.get_my_ip()}:{self.get_my_port()};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
         subRequest += f'Max-Forwards: 70\r\n'
         subRequest += f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n'
         subRequest += f'Expires: {self.default_expires * 2}\r\n'
@@ -823,7 +839,7 @@ class SIPClient:
         regRequest += f'To: "{self.username}" <sip:{self.username}@{self.server}>\r\n'
         regRequest += f'Call-ID: {self.gen_call_id()}\r\n'
         regRequest += f'CSeq: {self.registerCounter.next()} REGISTER\r\n'
-        regRequest += f'Contact: <sip:{self.username}@{self.myIP}:{self.myPort};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
+        regRequest += f'Contact: <sip:{self.username}@{self.get_my_ip()}:{self.get_my_port()};transport=UDP>;+sip.instance="<urn:uuid:{self.urnUUID}>"\r\n'
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += f'Max-Forwards: 70\r\n'
         regRequest += f'Allow-Events: org.3gpp.nwinitdereg\r\n'
@@ -868,6 +884,20 @@ class SIPClient:
 
         return okResponse
 
+    def gen_notify(self, request):
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        notify_response = "SIP/2.0 200 OK\r\n"
+        notify_response += self._gen_response_via_header(request)
+        notify_response += f"To: {request.headers['To']['raw']};tag={request.headers['To']['tag']}\r\n"
+        notify_response += f"From: {request.headers['From']['raw']};tag={request.headers['From']['tag']}\r\n"
+        notify_response += f"Call-ID: {request.headers['Call-ID']}\r\n"
+        notify_response += f"CSeq: {int(request.headers['CSeq']['check'])+1} {request.headers['CSeq']['method']}\r\n"
+        notify_response += f"Event: {request.headers['Event']}\r\n"
+        notify_response += "Content-Length: 0\r\n\r\n"
+
+        return notify_response
+
     def gen_ringing(self, request):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
@@ -893,10 +923,12 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
-        body += "o=pyVoIP " + sess_id + " " + str(
-            int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        # body += "o=pyVoIP " + sess_id + " " + str(
+        #    int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        body += f"o=pyVoIP {sess_id} {str(int(sess_id) + 2)} IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
         body += "s=pyVoIP """ + pyVoIP.__version__ + "\r\n"
-        body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        # body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        body += f"c=IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
         body += "t=0 0\r\n"
         for x in ms:
             body += "m=audio " + str(x) + " RTP/AVP"  # TODO: Check AVP mode from request
@@ -921,7 +953,7 @@ class SIPClient:
         regRequest += "Call-ID: "+request.headers['Call-ID']+"\r\n"
         regRequest += "CSeq: "+request.headers['CSeq']['check']+" "+request.headers['CSeq']['method']+"\r\n"
         # TODO: Add Supported
-        regRequest += "Contact: <sip:"+self.username+"@"+self.myIP+":"+str(self.myPort)+">\r\n"
+        regRequest += f"Contact: <sip:{self.username}@{self.get_my_ip()}:{self.get_my_port()}>\r\n"
         regRequest += "User-Agent: pyVoIP """+pyVoIP.__version__+"\r\n"
         regRequest += "Allow: "+(", ".join(pyVoIP.SIPCompatibleMethods))+"\r\n"
         regRequest += "Content-Type: application/sdp\r\n"
@@ -935,10 +967,12 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
-        body += "o=pyVoIP " + sess_id + " " + str(
-            int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        # body += "o=pyVoIP " + sess_id + " " + str(
+        #    int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        body += f"o=pyVoIP {sess_id} {str(int(sess_id) + 2)} IN IP4 {self.get_my_port()}\r\n"  # TODO: Check IPv4/IPv6
         body += "s=pyVoIP """ + pyVoIP.__version__ + "\r\n"
-        body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        # body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
+        body += f"c=IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
         body += "t=0 0\r\n"
         for x in ms:
             body += "m=audio " + str(x) + " RTP/AVP"  # TODO: Check AVP mode from request
@@ -960,7 +994,7 @@ class SIPClient:
         invRequest = "INVITE sip:" + number + "@" + self.server + " SIP/2.0\r\n"
         invRequest += "Via: SIP/2.0/UDP " + self.myIP + ":" + str(self.myPort) + ";branch=" + branch + "\r\n"
         invRequest += "Max-Forwards: 70\r\n"
-        invRequest += "Contact: <sip:" + self.username + "@" + self.myIP + ":" + str(self.myPort) + ">\r\n"
+        invRequest += f"Contact: <sip:{self.username}@{self.get_my_ip()}:{self.get_my_port()}>\r\n"
         invRequest += "To: <sip:" + number + "@" + self.server + ">\r\n"
         invRequest += "From: <sip:" + self.username + "@" + self.myIP + ">;tag=" + tag + "\r\n"
         invRequest += "Call-ID: " + call_id + "\r\n"
@@ -988,7 +1022,7 @@ class SIPClient:
             byeRequest += "From: " + request.headers['To']['raw'] + ";tag=" + tag + "\r\n"
         byeRequest += "Call-ID: " + request.headers['Call-ID'] + "\r\n"
         byeRequest += "CSeq: " + str(int(request.headers['CSeq']['check']) + 1) + " BYE\r\n"
-        byeRequest += "Contact: <sip:" + self.username + "@" + self.myIP + ":" + str(self.myPort) + ">\r\n"
+        byeRequest += f"Contact: <sip:{self.username}@{self.get_my_ip()}:{self.get_my_port()}>\r\n"
         byeRequest += "User-Agent: pyVoIP """ + pyVoIP.__version__ + "\r\n"
         byeRequest += "Allow: " + (", ".join(pyVoIP.SIPCompatibleMethods)) + "\r\n"
         byeRequest += "Content-Length: 0\r\n\r\n"
@@ -1143,11 +1177,18 @@ class SIPClient:
         ready = select.select([self.out], [], [], self.register_timeout)
         if ready[0]:
             resp = self.s.recv(8192)
+            # Now we have the public IP and the public port when NAT is used.
             debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} <-- received Message register 1\n----\n{resp}\n----\n")
         else:
             raise TimeoutError('Registering on SIP Server timed out')
 
         response = SIPMessage(resp)
+        if len(response.headers['Via']) > 0 and 'received' in response.headers['Via'][0] \
+                and 'rport' in response.headers['Via'][0]:
+            self.my_public_ip = response.headers['Via'][0]['received']
+            self.my_public_port = response.headers['Via'][0]['rport']
+            debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} after received Message register 1"
+                  f" received {self.my_public_ip} rport {self.my_public_port}")
         if response.status == SIPStatus.TRYING:
             response = SIPMessage(self.s.recv(8192))
             debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} <-- received Message register 2\n----\n{response.raw}\n----\n")
@@ -1198,7 +1239,7 @@ class SIPClient:
         self.recvLock.release()
         if response.status == SIPStatus.OK:
             if self.NSD:
-                # self.subscribe(response)
+                # When working with SIP notify keep alive this is not need and not good
                 self.registerThread = Timer(self.default_expires - 5, self.register)
                 self.registerThread.name = f"SIP Register CSeq: {self.registerCounter.x}"
                 self.registerThread.start()

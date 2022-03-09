@@ -38,22 +38,25 @@ class PhoneStatus(Enum):
 
 class VoIPCall:
     '''
-    For initiating a phone call, try sending the packet and the recieved OK packet will be sent to the VoIPCall request header.
+    For initiating a phone call, try sending the packet and the received OK packet will be sent to the VoIPCall
+    request header.
     '''
 
-    def __init__(self, phone, callstate, request, session_id, myIP, portRange=(10000, 20000), ms=None,
-                 sendmode="sendonly"):
-        debug(
-            f"{self.__class__.__name__}.{inspect.stack()[0][3]} {callstate}, {session_id}, {myIP}, {portRange}, {ms}, {sendmode}")
+    # def __init__(self, phone, callstate, request, session_id, myIP, portRange=(10000, 20000), ms=None,
+    #             sendmode="sendonly"):
+    #    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {callstate}, {session_id}, {myIP}, {portRange}, "
+    #          f"{ms}, {sendmode}")
+    def __init__(self, phone, callstate, request, session_id, ms=None, sendmode="sendonly"):
+        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} {callstate}, {session_id}, {ms}, {sendmode}")
         self.state = callstate
         self.phone = phone
         self.sip = self.phone.sip
         self.request = request
         self.call_id = request.headers['Call-ID']
         self.session_id = str(session_id)
-        self.myIP = myIP
-        self.rtpPortHigh = portRange[1]
-        self.rtpPortLow = portRange[0]
+        # self.myIP = myIP
+        # self.rtpPortHigh = portRange[1]
+        # self.rtpPortLow = portRange[0]
         self.sendmode = sendmode
 
         self.dtmfLock = Lock()
@@ -135,12 +138,14 @@ class VoIPCall:
 
                 port = None
                 while port is None:
-                    proposed = random.randint(self.rtpPortLow, self.rtpPortHigh)
+                    # proposed = random.randint(self.rtpPortLow, self.rtpPortHigh)
+                    proposed = random.randint(self.phone.rtpPortLow, self.phone.rtpPortHigh)
                     if not proposed in self.phone.assignedPorts:
                         self.phone.assignedPorts.append(proposed)
                         self.assignedPorts[proposed] = codecs
                         port = proposed
-                self.create_rtp_clients(codecs, self.myIP, port, request, i['port'])
+                # self.create_rtp_clients(codecs, self.myIP, port, request, i['port'])
+                self.create_rtp_clients(codecs, self.phone.myIP, port, request, i['port'])
         elif callstate == CallState.DIALING:
             self.ms = ms
             for m in self.ms:
@@ -186,13 +191,15 @@ class VoIPCall:
     def renegotiate(self, request):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         m = self.gen_ms()
-        message = self.sip.genAnswer(request, self.session_id, m, self.sendmode)
+        message = self.sip.gen_answer(request, self.session_id, m, self.sendmode)
         self.sip.send_message(message)
         for i in request.body['m']:
             for ii, client in zip(range(len(request.body['c'])), self.RTPClients):
+                debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} client 1 outIP {client.outIP} outPort {client.outPort}')
                 client.outIP = request.body['c'][ii]['address']
                 # TODO: Check IPv4/IPv6
                 client.outPort = i['port'] + ii
+                debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} client 2 outIP {client.outIP} outPort {client.outPort}')
 
     def answer(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
@@ -225,7 +232,8 @@ class VoIPCall:
             if e:
                 raise RTP.RTPParseError("RTP Payload type {} not found.".format(str(p)))
 
-            self.create_rtp_clients(assoc, self.myIP, self.port, request, i['port'])
+            # self.create_rtp_clients(assoc, self.myIP, self.port, request, i['port'])
+            self.create_rtp_clients(assoc, self.sip.get_my_ip(), self.sip.get_my_port(), request, i['port'])
 
         for x in self.RTPClients:
             x.start()
@@ -371,7 +379,7 @@ class VoIPPhone:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         call_id = request.headers['Call-ID']
         if call_id in self.calls:
-            debug("Re-negotiation detected!")
+            debug(f'{self.__class__.__name__} Re-negotiation detected! call state {self.calls[call_id].state}')
             # TODO: this seems "dangerous" if for some reason sip server handles 2 and more bindings
             #  it will cause duplicate RTP-Clients to spawn
             # CallState.Ringing seems important here to prevent multiple answering and RTP-Client spawning.
@@ -450,8 +458,9 @@ class VoIPPhone:
         create VoIP cal object. Should be separated to enable better subclassing
         '''
         call_id = request.headers['Call-ID']
-        self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP,
-                                       portRange=(self.rtpPortLow, self.rtpPortHigh), sendmode=self.recvmode)
+        # self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP,
+        #                               portRange=(self.rtpPortLow, self.rtpPortHigh), sendmode=self.recvmode)
+        self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, sendmode=self.recvmode)
 
     def start(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from start')
@@ -483,10 +492,9 @@ class VoIPPhone:
             if not proposed in self.assignedPorts:
                 self.assignedPorts.append(proposed)
                 port = proposed
-        medias = {}
-        medias[port] = {0: pyVoIP.RTP.PayloadType.PCMU, 101: pyVoIP.RTP.PayloadType.EVENT}
+        medias = {port: {0: pyVoIP.RTP.PayloadType.PCMU, 101: pyVoIP.RTP.PayloadType.EVENT}}
         request, call_id, sess_id = self.sip.invite(number, medias, pyVoIP.RTP.TransmitType.SENDRECV)
-        self.calls[call_id] = VoIPCall(self, CallState.DIALING, request, sess_id, self.myIP, ms=medias,
-                                       sendmode=self.sendmode)
-
+        # self.calls[call_id] = VoIPCall(self, CallState.DIALING, request, sess_id, self.myIP, ms=medias,
+        #                                sendmode=self.sendmode)
+        self.calls[call_id] = VoIPCall(self, CallState.DIALING, request, sess_id, ms=medias, sendmode=self.sendmode)
         return self.calls[call_id]
