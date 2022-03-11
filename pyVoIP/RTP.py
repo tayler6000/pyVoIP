@@ -342,8 +342,6 @@ class RTPClient:
             packet += self.outSSRC.to_bytes(4, byteorder='big')
             packet += payload
 
-            # debug(payload)
-
             try:
                 self.sout.sendto(packet, (self.outIP, self.outPort))
             except OSError:

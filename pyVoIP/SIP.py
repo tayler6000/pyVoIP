@@ -6,7 +6,6 @@ import pyVoIP
 import hashlib
 import socket
 import random
-import re
 import time
 import uuid
 import select
@@ -268,7 +267,6 @@ class SIPMessage:
             if len(info) >= 2:
                 tag = info[1]
             raw = info[0]
-            # contact = raw.split('<sip:')
             # For some header from / to are only sip:xxxx@xxxxxx not <sip:xxxxxxx@xxxxxxxxx>
             # so changed raw.split to the regex version re.split
             contact = re.split(r"<?sip:", raw)
@@ -502,6 +500,8 @@ class SIPMessage:
         debug(f"SIPMessage.parseRawBody start (staticmethode)")
         if len(body)>0:
             body_raw = body.split(b'\r\n')
+            # create a unique list of the body to avoid duplicate c elements. See also ToDo VoIP gen_ms
+            body_raw = list(set(body_raw))
             for x in body_raw:
                 i = str(x, 'utf8').split('=')
                 if i != ['']:
@@ -514,7 +514,6 @@ class SIPMessage:
 
         headers_raw = headers.split(b'\r\n')
         self.heading = headers_raw.pop(0)
-        # debug(f"self.heading start {self.heading}")
         self.version = str(self.heading.split(b" ")[0], 'utf8')
         if self.version not in self.SIPCompatibleVersions:
             raise SIPParseError("SIP Version {} not compatible.".format(self.version))
@@ -547,6 +546,7 @@ class SIPClient:
 
     def __init__(self, server, port, username, password, myIP, proxy, myPort=5060, callCallback=None):
         self.NSD = False
+        self.use_keep_alive = False
         self.server = server
         self.port = port
         self.hostname = socket.gethostname()
@@ -587,10 +587,6 @@ class SIPClient:
               f'\n----\n{message}\n----\n')
         self.out.sendto(message.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
-    def received_message(self):
-        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} --> receive message')
-
     def get_my_ip(self):
         return self.my_public_ip if self.myIP else self.myIP
 
@@ -623,7 +619,8 @@ class SIPClient:
                     request = self.gen_sip_version_not_supported(message)
                     self.send_message(request)
                 else:
-                    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} SIPParseError in SIP.recv: {type(e)}, {e}")
+                    debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} SIPParseError in SIP.recv: "
+                          f"{type(e)}, {e}")
             except Exception as e:
                 if pyVoIP.DEBUG:
                     debug(f"\n------------------------\n{self.__class__.__name__}.{inspect.stack()[0][3]} "
@@ -703,6 +700,7 @@ class SIPClient:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         self.NSD = False
+        self.use_keep_alive = False
         if self.registerThread:
             # Only run if registerThread exists
             self.registerThread.cancel()
@@ -896,6 +894,8 @@ class SIPClient:
         notify_response += f"Event: {request.headers['Event']}\r\n"
         notify_response += "Content-Length: 0\r\n\r\n"
 
+        if request.headers['Event'] == "keep-alive":
+            self.use_keep_alive = True
         return notify_response
 
     def gen_ringing(self, request):
@@ -923,11 +923,9 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
-        # body += "o=pyVoIP " + sess_id + " " + str(
-        #    int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
-        body += f"o=pyVoIP {sess_id} {str(int(sess_id) + 2)} IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
+        # TODO: Check IPv4/IPv6
+        body += f"o={request.headers['To']['number']} {sess_id} {str(int(sess_id) + 2)} IN IP4 {self.get_my_ip()}\r\n"
         body += "s=pyVoIP """ + pyVoIP.__version__ + "\r\n"
-        # body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
         body += f"c=IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
         body += "t=0 0\r\n"
         for x in ms:
@@ -967,11 +965,8 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         # Generate body first for content length
         body = "v=0\r\n"
-        # body += "o=pyVoIP " + sess_id + " " + str(
-        #    int(sess_id) + 2) + " IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
         body += f"o=pyVoIP {sess_id} {str(int(sess_id) + 2)} IN IP4 {self.get_my_port()}\r\n"  # TODO: Check IPv4/IPv6
         body += "s=pyVoIP """ + pyVoIP.__version__ + "\r\n"
-        # body += "c=IN IP4 " + self.myIP + "\r\n"  # TODO: Check IPv4/IPv6
         body += f"c=IN IP4 {self.get_my_ip()}\r\n"  # TODO: Check IPv4/IPv6
         body += "t=0 0\r\n"
         for x in ms:
@@ -1240,7 +1235,9 @@ class SIPClient:
         if response.status == SIPStatus.OK:
             if self.NSD:
                 # When working with SIP notify keep alive this is not need and not good
-                self.registerThread = Timer(self.default_expires - 5, self.register)
+                # When the timer ends a new register is started.
+                # self.registerThread = Timer(self.default_expires - 5, self.register)
+                self.registerThread = Timer(self.default_expires - 5, self.check_for_new_register)
                 self.registerThread.name = f"SIP Register CSeq: {self.registerCounter.x}"
                 self.registerThread.start()
             return True
@@ -1248,13 +1245,20 @@ class SIPClient:
             raise InvalidAccountInfoError(
                 f"Invalid Username or Password for SIP server {self.server}:{str(self.myPort)}")
 
-    def _handle_bad_request(self):
+    def check_for_new_register(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} '
+              f'start with use keep alive {self.use_keep_alive}')
+        if self.use_keep_alive:
+            return
+        self.register()
+
+    def _handle_bad_request(self):
         # Bad Request
         # TODO: implement
         # TODO: check if broken connection can be brought back with new urn:uuid or reply with expire 0
-        debug('Bad Request')
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} Bad Request')
 
     def subscribe(self, lastresponse):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
