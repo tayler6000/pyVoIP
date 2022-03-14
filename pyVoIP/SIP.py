@@ -1,5 +1,6 @@
-from enum import IntEnum
+from enum import Enum, IntEnum
 from threading import Timer, Lock
+from typing import Any, Callable, Dict, List
 import pyVoIP
 import hashlib
 import socket
@@ -30,30 +31,46 @@ class SIPParseError(Exception):
 
 class Counter():
 
-    def __init__(self, start=1):
+    def __init__(self, start: int = 1):
         self.x = start
 
-    def count(self):
+    def count(self) -> int:
         x = self.x
         self.x += 1
         return x
 
-    def next(self):
+    def next(self) -> int:
         return self.count()
 
-    def current(self):
+    def current(self) -> int:
         return self.x
 
 
-class SIPStatus(IntEnum):
+class SIPStatus(Enum):
 
-    def __new__(cls, value, phrase, description=''):
-        obj = int.__new__(cls, value)
+    def __new__(cls, value: int, phrase: str, description: str = ''):
+        obj = object.__new__(cls)
         obj._value_ = value
 
         obj.phrase = phrase
         obj.description = description
         return obj
+
+    @property
+    def phrase(self) -> str:
+        return self._phrase
+
+    @phrase.setter
+    def phrase(self, value: str) -> None:
+        self._phrase = value
+
+    @property
+    def description(self) -> str:
+        return self._description
+
+    @description.setter
+    def description(self, value: str) -> None:
+        self._description = value
 
     # Informational
     TRYING = (
@@ -301,7 +318,7 @@ class SIPStatus(IntEnum):
 
 class SIPMessageType(IntEnum):
 
-    def __new__(cls, value):
+    def __new__(cls, value: int):
         obj = int.__new__(cls, value)
         obj._value_ = value
         return obj
@@ -319,12 +336,12 @@ class SIPMessage():
         self.type = None
         self.status = 0
         self.headers = {'Via': []}
-        self.body = {}
+        self.body: Dict[str, Any] = {}
         self.authentication = {}
         self.raw = data
         self.parse(data)
 
-    def summary(self):
+    def summary(self) -> str:
         data = ""
         if self.type == SIPMessageType.RESPONSE:
             data += f"Status: {int(self.status)} {self.status.phrase}\n\n"
@@ -340,7 +357,7 @@ class SIPMessage():
 
         return data
 
-    def parse(self, data):
+    def parse(self, data: bytes) -> None:
         try:
             headers, body = data.split(b'\r\n\r\n')
         except ValueError as ve:
@@ -361,13 +378,13 @@ class SIPMessage():
             raise SIPParseError("Unable to decipher SIP request: " +
                                 str(heading, 'utf8'))
 
-    def parseHeader(self, header, data):
+    def parseHeader(self, header: str, data: str) -> None:
         warnings.warn("parseHeader is deprecated due to PEP8 compliance. " +
                       "Use parse_header instead.", DeprecationWarning,
                       stacklevel=2)
         return self.parse_header(header, data)
 
-    def parse_header(self, header, data):
+    def parse_header(self, header: str, data: str) -> None:
         if header == "Via":
             for d in data:
                 info = re.split(" |;", d)
@@ -434,13 +451,13 @@ class SIPMessage():
         else:
             self.headers[header] = data
 
-    def parseBody(self, header, data):
+    def parseBody(self, header: str, data: str) -> None:
         warnings.warn("parseBody is deprecated due to PEP8 compliance. " +
                       "Use parse_body instead.", DeprecationWarning,
                       stacklevel=2)
         return self.parse_body(header, data)
 
-    def parse_body(self, header, data):
+    def parse_body(self, header: str, data: str) -> None:
         if 'Content-Encoding' in self.headers:
             raise SIPParseError("Unable to parse encoded content.")
         if self.headers['Content-Type'] == 'application/sdp':
@@ -451,13 +468,13 @@ class SIPMessage():
             elif header == "o":
                 # SDP 5.2 Origin
                 # o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address> # noqa: E501
-                data = data.split(' ')
+                d = data.split(' ')
                 self.body[header] = {
-                                        'username': data[0], 'id': data[1],
-                                        'version': data[2],
-                                        'network_type': data[3],
-                                        'address_type': data[4],
-                                        'address': data[5]
+                                        'username': d[0], 'id': d[1],
+                                        'version': d[2],
+                                        'network_type': d[3],
+                                        'address_type': d[4],
+                                        'address': d[5]
                                     }
             elif header == "s":
                 # SDP 5.3 Session Name
@@ -482,7 +499,7 @@ class SIPMessage():
                 # c=<nettype> <addrtype> <connection-address>
                 if 'c' not in self.body:
                     self.body['c'] = []
-                data = data.split(' ')
+                d = data.split(' ')
                 # TTL Data and Multicast addresses may be specified.
                 # For IPv4 its listed as addr/ttl/number of addresses.
                 # c=IN IP4 224.2.1.1/127/3 means:
@@ -492,38 +509,38 @@ class SIPMessage():
                 # With the TTL being 127.
                 # IPv6 does not support time to live so you will only see a '/'
                 # for multicast addresses.
-                if '/' in data[2]:
-                    if data[1] == "IP6":
+                if '/' in d[2]:
+                    if d[1] == "IP6":
                         self.body[header].append({
-                            'network_type': data[0],
-                            'address_type': data[1],
-                            'address': data[2].split('/')[0],
+                            'network_type': d[0],
+                            'address_type': d[1],
+                            'address': d[2].split('/')[0],
                             'ttl': None,
-                            'address_count': int(data[2].split('/')[1])
+                            'address_count': int(d[2].split('/')[1])
                         })
                     else:
-                        address_data = data[2].split('/')
+                        address_data = d[2].split('/')
                         if len(address_data) == 2:
                             self.body[header].append({
-                                'network_type': data[0],
-                                'address_type': data[1],
+                                'network_type': d[0],
+                                'address_type': d[1],
                                 'address': address_data[0],
                                 'ttl': int(address_data[1]),
                                 'address_count': 1
                             })
                         else:
                             self.body[header].append({
-                                'network_type': data[0],
-                                'address_type': data[1],
+                                'network_type': d[0],
+                                'address_type': d[1],
                                 'address': address_data[0],
                                 'ttl': int(address_data[1]),
                                 'address_count': int(address_data[2])
                             })
                 else:
                     self.body[header].append({
-                                                'network_type': data[0],
-                                                'address_type': data[1],
-                                                'address': data[2],
+                                                'network_type': d[0],
+                                                'address_type': d[1],
+                                                'address': d[2],
                                                 'ttl': None, 'address_count': 1
                                              })
             elif header == "b":
@@ -536,40 +553,40 @@ class SIPMessage():
                 # The bandwidth is given in kilobits per second.
                 # As this was written in 2006, this could be Kibibits.
                 # TODO: Implement Bandwidth restrictions
-                data = data.split(':')
-                self.body[header] = {'type': data[0], 'bandwidth': data[1]}
+                d = data.split(':')
+                self.body[header] = {'type': d[0], 'bandwidth': d[1]}
             elif header == "t":
                 # SDP 5.9 Timing
                 # t=<start-time> <stop-time>
-                data = data.split(' ')
-                self.body[header] = {'start': data[0], 'stop': data[1]}
+                d = data.split(' ')
+                self.body[header] = {'start': d[0], 'stop': d[1]}
             elif header == "r":
                 # SDP 5.10 Repeat Times
                 # r=<repeat interval> <active duration> <offsets from start-time> # noqa: E501
-                data = data.split(' ')
+                d = data.split(' ')
                 self.body[header] = {
-                                        'repeat': data[0], 'duration': data[1],
-                                        'offset1': data[2], 'offset2': data[3]
+                                        'repeat': d[0], 'duration': d[1],
+                                        'offset1': d[2], 'offset2': d[3]
                                     }
             elif header == "z":
                 # SDP 5.11 Time Zones
                 # z=<adjustment time> <offset> <adjustment time> <offset> ....
                 # Used for change in timezones such as day light savings time.
-                data = data.split(0)
-                amount = len(data) / 2
+                d = data.split()
+                amount = len(d) / 2
                 self.body[header] = {}
-                for x in range(amount):
-                    self.body[header]['adjustment-time' + str(x)] = data[x * 2]
-                    self.body[header]['offset' + str(x)] = data[x * 2 + 1]
+                for x in range(int(amount)):
+                    self.body[header]['adjustment-time' + str(x)] = d[x * 2]
+                    self.body[header]['offset' + str(x)] = d[x * 2 + 1]
             elif header == "k":
                 # SDP 5.12 Encryption Keys
                 # k=<method>
                 # k=<method>:<encryption key>
                 if ':' in data:
-                    data = data.split(':')
-                    self.body[header] = {'method': data[0], 'key': data[1]}
+                    d = data.split(':')
+                    self.body[header] = {'method': d[0], 'key': d[1]}
                 else:
-                    self.body[header] = {'method': data}
+                    self.body[header] = {'method': d}
             elif header == "m":
                 # SDP 5.14 Media Descriptions
                 # m=<media> <port>/<number of ports> <proto> <fmt> ...
@@ -578,21 +595,21 @@ class SIPMessage():
                 # addresses in SDP 5.7 c=
                 if 'm' not in self.body:
                     self.body['m'] = []
-                data = data.split(' ')
+                d = data.split(' ')
 
-                if '/' in data[1]:
-                    ports_raw = data[1].split('/')
+                if '/' in d[1]:
+                    ports_raw = d[1].split('/')
                     port = ports_raw[0]
-                    count = ports_raw[1]
+                    count = int(ports_raw[1])
                 else:
-                    port = data[1]
+                    port = d[1]
                     count = 1
-                methods = data[3:]
+                methods = d[3:]
 
                 self.body['m'].append({
-                    'type': data[0], 'port': int(port),
-                    'port_count': int(count),
-                    'protocol': pyVoIP.RTP.RTPProtocol(data[2]),
+                    'type': d[0], 'port': int(port),
+                    'port_count': count,
+                    'protocol': pyVoIP.RTP.RTPProtocol(d[2]),
                     'methods': methods, 'attributes': {}
                 })
                 for x in self.body['m'][-1]['methods']:
@@ -606,9 +623,9 @@ class SIPMessage():
                     self.body['a'] = {}
 
                 if ':' in data:
-                    data = data.split(':')
-                    attribute = data[0]
-                    value = data[1]
+                    d = data.split(':')
+                    attribute = d[0]
+                    value = d[1]
                 else:
                     attribute = data
                     value = None
@@ -616,19 +633,20 @@ class SIPMessage():
                 if value is not None:
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>] # noqa: E501
-                        value = re.split(" |/", value)
+                        v = re.split(" |/", value)
                         for x in self.body['m']:
-                            if value[0] in x['methods']:
+                            # reveal_type(x) # Shows x is type int even thought it should be a dict. # noqa: E501
+                            if v[0] in x['methods']:
                                 index = self.body['m'].index(x)
                                 break
-                        if len(value) == 4:
-                            encoding = value[3]
+                        if len(v) == 4:
+                            encoding = v[3]
                         else:
                             encoding = None
 
-                        self.body['m'][int(index)]['attributes'][value[0]]['rtpmap'] = {   # noqa: E501
-                            'id': value[0], 'name': value[1],
-                            'frequency': value[2], 'encoding': encoding
+                        self.body['m'][int(index)]['attributes'][v[0]]['rtpmap'] = {   # noqa: E501
+                            'id': v[0], 'name': v[1], 'frequency': v[2],
+                            'encoding': encoding
                         }
 
                     elif attribute == "fmtp":
@@ -655,7 +673,7 @@ class SIPMessage():
             self.body[header] = data
 
     @staticmethod
-    def parse_raw_header(headers_raw, handle):
+    def parse_raw_header(headers_raw: List[bytes], handle: Callable) -> None:
         headers = {'Via': []}
         # Only use first occurance of VIA header field;
         # got second VIA from Kamailio running in DOCKER
@@ -672,7 +690,7 @@ class SIPMessage():
             handle(key, val)
 
     @staticmethod
-    def parse_raw_body(body, handle):
+    def parse_raw_body(body: bytes, handle: Callable) -> None:
         if len(body) > 0:
             body_raw = body.split(b'\r\n')
             for x in body_raw:
@@ -680,13 +698,13 @@ class SIPMessage():
                 if i != ['']:
                     handle(i[0], i[1])
 
-    def parseSIPResponse(self, data):
+    def parseSIPResponse(self, data: bytes) -> None:
         warnings.warn("parseSIPResponse is deprecated " +
                       "due to PEP8 compliance. Use parse_sip_response " +
                       "instead.", DeprecationWarning, stacklevel=2)
         return self.parse_sip_response(data)
 
-    def parse_sip_response(self, data):
+    def parse_sip_response(self, data: bytes) -> None:
         headers, body = data.split(b'\r\n\r\n')
 
         headers_raw = headers.split(b'\r\n')
@@ -701,13 +719,13 @@ class SIPMessage():
 
         self.parse_raw_body(body, self.parseBody)
 
-    def parseSIPMessage(self, data):
+    def parseSIPMessage(self, data: bytes) -> None:
         warnings.warn("parseSIPMessage is deprecated due to PEP8 compliance." +
                       " Use parse_sip_message instead.", DeprecationWarning,
                       stacklevel=2)
         return self.parse_sip_message(data)
 
-    def parse_sip_message(self, data):
+    def parse_sip_message(self, data: bytes) -> None:
         headers, body = data.split(b'\r\n\r\n')
 
         headers_raw = headers.split(b'\r\n')
