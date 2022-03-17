@@ -446,28 +446,30 @@ class SIPMessage:
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>]
                         value = re.split(" |/", value)
-                        for x in self.body['m']:
-                            if value[0] in x['methods']:
-                                index = self.body['m'].index(x)
-                                break
-                        if len(value) == 4:
-                            encoding = value[3]
-                        else:
-                            encoding = None
-                        self.body['m'][int(index)]['attributes'][value[0]]['rtpmap'] = {'id': value[0],
-                                                                                        'name': value[1],
-                                                                                        'frequency': value[2],
-                                                                                        'encoding': encoding}
+                        if 'm' in self.body:
+                            for x in self.body['m']:
+                                if value[0] in x['methods']:
+                                    index = self.body['m'].index(x)
+                                    break
+                            if len(value) == 4:
+                                encoding = value[3]
+                            else:
+                                encoding = None
+                            self.body['m'][int(index)]['attributes'][value[0]]['rtpmap'] = {'id': value[0],
+                                                                                            'name': value[1],
+                                                                                            'frequency': value[2],
+                                                                                            'encoding': encoding}
                     elif attribute == "fmtp":
                         # a=fmtp:<format> <format specific parameters>
                         value = value.split(' ')
-                        for x in self.body['m']:
-                            if value[0] in x['methods']:
-                                index = self.body['m'].index(x)
-                                break
+                        if 'm' in self.body:
+                            for x in self.body['m']:
+                                if value[0] in x['methods']:
+                                    index = self.body['m'].index(x)
+                                    break
 
-                        self.body['m'][int(index)]['attributes'][value[0]]['fmtp'] = {'id': value[0],
-                                                                                      'settings': value[1:]}
+                            self.body['m'][int(index)]['attributes'][value[0]]['fmtp'] = {'id': value[0],
+                                                                                        'settings': value[1:]}
                     else:
                         self.body['a'][attribute] = value
                 else:

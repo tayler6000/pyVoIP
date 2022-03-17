@@ -119,8 +119,9 @@ class RTPPacketManager:
         self.rebuilding = False
 
     def read(self, length=160):
-        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        # Attention: many calls
+        # debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+        #      f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         while self.rebuilding:  # This acts functionally as a lock while the buffer is being rebuilt.
             time.sleep(0.01)
         self.bufferLock.acquire()
@@ -365,8 +366,9 @@ class RTPClient:
             raise RTPParseError("Unsupported codec (parse): " + str(packet.payload_type))
 
     def encode_packet(self, payload):
-        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        # Attention: many calls
+        # debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+        #       f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         if self.preference == PayloadType.PCMU:
             return self.encode_pcmu(payload)
         elif self.preference == PayloadType.PCMA:
@@ -382,8 +384,9 @@ class RTPClient:
         self.pmin.write(packet.timestamp, data)
 
     def encode_pcmu(self, packet):
-        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+        # Attention: many calls
+        # debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
+        #       f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         packet = audioop.bias(packet, 1, -128)
         packet = audioop.lin2ulaw(packet, 1)
         return packet

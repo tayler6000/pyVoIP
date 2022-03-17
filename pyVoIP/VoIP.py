@@ -114,11 +114,16 @@ class VoIPCall:
                             assoc[int(x)] = p
                         except ValueError:
                             # e = True
+                            # ToDo sometimes rtpmap raise a KeyError because fmtp is set instate
                             pt = i['attributes'][x]['rtpmap']['name']
                             warnings.warn(f"RTP Payload type {pt} not found.", stacklevel=20)
                             # Resets the warning filter so this warning will come up again if it happens.
                             # However, this also resets all other warnings as well.
                             warnings.simplefilter("default")
+                            p = RTP.PayloadType("UNKOWN")
+                            assoc[int(x)] = p
+                        except KeyError:
+                            warnings.warn(f"RTP KeyError {x} not found.", stacklevel=20)
                             p = RTP.PayloadType("UNKOWN")
                             assoc[int(x)] = p
 
