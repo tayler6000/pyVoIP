@@ -5,11 +5,13 @@ import inspect
 import pyVoIP
 import hashlib
 import socket
+import netaddr
 import random
 import time
 import uuid
 import select
 import re
+import optparse
 
 __all__ = ['Counter', 'InvalidAccountInfoError', 'SIPClient', 'SIPMessage', 'SIPMessageType', 'SIPParseError',
            'SIPStatus']
@@ -203,6 +205,27 @@ class SIPMessage:
         self.raw = data
         self.parse(data)
 
+    def split_address(self, address):
+        debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} with address {address}')
+        if address.find("[", 0, 2) == -1:
+            debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} IPv4')
+            if address.find(":", 0, len(address)) == -1:
+                return address, 5060
+            else:
+                return address.split(':')
+        else:
+            debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} IPv6')
+            index = address.find("]", 0, len(address))
+            if index == -1:
+                debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} Something wrong')
+                return "", ""
+            else:
+                if address.find(":", index, len(address)) == -1:
+                    return address, 5060
+                else:
+                    new_ip, port = address.rsplit(':', 1)
+                    return new_ip.strip('[]'), port
+
     def summary(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
@@ -218,7 +241,6 @@ class SIPMessage:
         data += "Body:\n"
         for x in self.body:
             data += x + ": " + str(self.body[x]) + "\n"
-
         return data
 
     def parse(self, data):
@@ -245,15 +267,18 @@ class SIPMessage:
 
     def parse_header(self, header, data):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
-        if header=="Via":
+        if header == "Via":
             for d in data:
                 info = re.split(" |;", d)
                 _type = info[0]  # SIP Method
-                _address = info[1].split(':')  # Tuple: address, port
-                _ip = _address[0]
+                # Tuple: address, port only for IP4 strait
+                # Tuple: [2001:171b:c9b7:4781:e8e2:5043:19e9:cc02]:55960 for IP6
+                debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} _address {info[1]}')
+                _ip, _port = self.split_address(info[1])
+                # debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} splitted _ip {_ip} _port {_port}')
                 # if no port is provided in via header assume default port
                 # needs to be str. check response build for better str creation
-                _port = info[1].split(':')[1] if len(_address) > 1 else "5060"
+                # Sometime the port comes in via in the rport element
                 _via = {'type': _type, 'address': (_ip, _port)}
                 for x in info[2:]:  # Sets branch, maddr, ttl, received, and rport if defined as per RFC 3261 20.7
                     if '=' in x:
@@ -689,7 +714,7 @@ class SIPClient:
         if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.s = socket.socket((socket.AF_INET if netaddr.valid_ipv4(self.myIP) else socket.AF_INET6), socket.SOCK_DGRAM)
         # self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.s.bind((self.myIP, self.myPort))
         self.out = self.s
@@ -1047,7 +1072,10 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         via = ''
         for h_via in request.headers['Via']:
-            v_line = f'Via: SIP/2.0/UDP {h_via["address"][0]}:{h_via["address"][1]}'
+            address = h_via["address"][0]
+            if netaddr.valid_ipv6(address):
+                address = f'[{address}]'
+            v_line = f'Via: SIP/2.0/UDP {address}:{h_via["address"][1]}'
             if 'branch' in h_via.keys():
                 v_line += f';branch={h_via["branch"]}'
             if 'rport' in h_via.keys():

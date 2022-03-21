@@ -6,6 +6,7 @@ import io
 import pyVoIP
 import random
 import socket
+import netaddr
 import threading
 import time
 
@@ -255,8 +256,10 @@ class RTPClient:
 
         self.inIP = inIP
         self.inPort = inPort
+        self.inIP_type = "IPv4" if netaddr.valid_ipv4(self.inIP) else "IPv6"
         self.outIP = outIP
         self.outPort = outPort
+        self.outIP_type = "IPv4" if netaddr.valid_ipv4(self.outIP) else "IPv6"
 
         self.dtmf = dtmf
 
@@ -271,10 +274,10 @@ class RTPClient:
 
     def start(self):
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
-        self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} self.inIP = {self.inIP}, self.inPort = {self.inPort}")
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start self.inIP '
+              f'= {self.inIP}, self.inPort = {self.inPort} ip_type = {self.inIP_type}')
+        self.sin = socket.socket((socket.AF_INET if self.inIP_type == "IPv4" else socket.AF_INET6), socket.SOCK_DGRAM)
+        self.sout = socket.socket((socket.AF_INET if self.outIP_type == "IPv4" else socket.AF_INET6), socket.SOCK_DGRAM)
         self.sin.bind((self.inIP, self.inPort))
         self.sin.setblocking(False)
 
