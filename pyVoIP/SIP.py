@@ -48,13 +48,19 @@ class Counter():
 
 class SIPStatus(Enum):
 
-    def __new__(cls, value: int, phrase: str, description: str = ''):
+    def __new__(cls, value: int, phrase: str = '', description: str = ''):
         obj = object.__new__(cls)
         obj._value_ = value
 
         obj.phrase = phrase
         obj.description = description
         return obj
+
+    def __int__(self) -> int:
+        return self._value_
+
+    def __str__(self) -> str:
+        return f"{self._value_} {self.phrase}"
 
     @property
     def phrase(self) -> str:
@@ -329,7 +335,7 @@ class SIPMessageType(IntEnum):
 
 class SIPMessage():
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.SIPCompatibleVersions = pyVoIP.SIPCompatibleVersions
         self.SIPCompatibleMethods = pyVoIP.SIPCompatibleMethods
         self.heading = ""
@@ -634,10 +640,9 @@ class SIPMessage():
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>] # noqa: E501
                         v = re.split(" |/", value)
-                        for x in self.body['m']:
-                            # reveal_type(x) # Shows x is type int even thought it should be a dict. # noqa: E501
-                            if v[0] in x['methods']:
-                                index = self.body['m'].index(x)
+                        for t in self.body['m']:
+                            if v[0] in t['methods']:
+                                index = self.body['m'].index(t)
                                 break
                         if len(v) == 4:
                             encoding = v[3]
@@ -651,14 +656,14 @@ class SIPMessage():
 
                     elif attribute == "fmtp":
                         # a=fmtp:<format> <format specific parameters>
-                        value = value.split(' ')
-                        for x in self.body['m']:
-                            if value[0] in x['methods']:
-                                index = self.body['m'].index(x)
+                        d = value.split(' ')
+                        for t in self.body['m']:
+                            if d[0] in t['methods']:
+                                index = self.body['m'].index(t)
                                 break
 
-                        self.body['m'][int(index)]['attributes'][value[0]]['fmtp'] = {  # noqa: E501
-                            'id': value[0], 'settings': value[1:]
+                        self.body['m'][int(index)]['attributes'][d[0]]['fmtp'] = {  # noqa: E501
+                            'id': d[0], 'settings': d[1:]
                         }
                     else:
                         self.body['a'][attribute] = value
@@ -674,7 +679,7 @@ class SIPMessage():
 
     @staticmethod
     def parse_raw_header(headers_raw: List[bytes], handle: Callable) -> None:
-        headers = {'Via': []}
+        headers: Dict[str, Any] = {'Via': []}
         # Only use first occurance of VIA header field;
         # got second VIA from Kamailio running in DOCKER
         # According to RFC 3261 these messages should be
