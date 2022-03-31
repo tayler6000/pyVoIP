@@ -994,7 +994,7 @@ class SIPClient():
         Generate unique branch id according to
         https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
         '''
-        branchid = uuid.uuid4().hex[:length]
+        branchid = uuid.uuid4().hex[:length - 7]
         return f"z9hG4bK{branchid}"
 
     def gen_urn_uuid(self):
