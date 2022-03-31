@@ -6,7 +6,6 @@ import audioop
 import io
 import pyVoIP
 import random
-import socket
 import warnings
 
 
@@ -71,7 +70,7 @@ class VoIPCall():
         # Type checker being weird with this variable.
         # Appears to be because this variable is used differently depending
         # on whether we received or originated the call.
-        # Will need to refactor the code later to proparly type this.
+        # Will need to refactor the code later to properly type this.
         self.assignedPorts: Any = {}
 
         if callstate == CallState.RINGING:
@@ -162,13 +161,17 @@ class VoIPCall():
                 self.port = m
                 self.assignedPorts[m] = self.ms[m]
 
-    def createRTPClients(self, codecs, ip, port, request, baseport) -> None:
+    def createRTPClients(self, codecs: Dict[int, RTP.PayloadType], ip: str,
+                         port: int, request: SIP.SIPMessage,
+                         baseport: int) -> None:
         warnings.warn("createRTPClients is deprecated due to PEP8 " +
                       "compliance. Use create_rtp_clients instead.",
                       DeprecationWarning, stacklevel=2)
         return self.create_rtp_clients(codecs, ip, port, request, baseport)
 
-    def create_rtp_clients(self, codecs, ip, port, request, baseport) -> None:
+    def create_rtp_clients(self, codecs: Dict[int, RTP.PayloadType], ip: str,
+                           port: int, request: SIP.SIPMessage,
+                           baseport: int) -> None:
         for ii in range(len(request.body['c'])):
             # TODO: Check IPv4/IPv6
             c = RTP.RTPClient(codecs, ip, port,
@@ -202,12 +205,12 @@ class VoIPCall():
         self.dtmfLock.release()
         return packet
 
-    def genMs(self):
+    def genMs(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
         warnings.warn("genMs is deprecated due to PEP8 compliance. " +
                       "Use gen_ms instead.", DeprecationWarning, stacklevel=2)
         return self.gen_ms()
 
-    def gen_ms(self):
+    def gen_ms(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
         """
         Generate m SDP attribute for answering originally and
         for re-negotiations.
@@ -221,7 +224,7 @@ class VoIPCall():
 
         return m
 
-    def renegotiate(self, request):
+    def renegotiate(self, request: SIP.SIPMessage) -> None:
         m = self.genMs()
         message = self.sip.genAnswer(request, self.session_id, m,
                                      self.sendmode)
@@ -275,13 +278,13 @@ class VoIPCall():
         self.request.headers['To']['tag'] = request.headers['To']['tag']
         self.state = CallState.ANSWERED
 
-    def notFound(self, request) -> None:
+    def notFound(self, request: SIP.SIPMessage) -> None:
         warnings.warn("notFound is deprecated due to PEP8 compliance. " +
                       "Use not_found instead.", DeprecationWarning,
                       stacklevel=2)
         return self.not_found(request)
 
-    def not_found(self, request) -> None:
+    def not_found(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
             debug("TODO: 500 Error, received a not found response for a " +
                   f"call not in the dailing state.  Call: {self.call_id}, " +
@@ -301,7 +304,7 @@ class VoIPCall():
         # also resets all other warnings.
         warnings.simplefilter("default")
 
-    def unavailable(self, request) -> None:
+    def unavailable(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
             debug("TODO: 500 Error, received an unavailable response for a " +
                   f"call not in the dailing state.  Call: {self.call_id}, " +
@@ -434,7 +437,7 @@ class VoIPPhone():
     def get_status(self) -> PhoneStatus:
         return self._status
 
-    def _callback_MSG_Invite(self, request):
+    def _callback_MSG_Invite(self, request: SIP.SIPMessage) -> None:
         call_id = request.headers['Call-ID']
         if call_id in self.calls:
             debug("Re-negotiation detected!")
@@ -474,14 +477,14 @@ class VoIPPhone():
                                     (self.server, self.port))
                 raise
 
-    def _callback_MSG_Bye(self, request):
+    def _callback_MSG_Bye(self, request: SIP.SIPMessage) -> None:
         debug("BYE recieved")
         call_id = request.headers['Call-ID']
         if call_id not in self.calls:
             return
         self.calls[call_id].bye()
 
-    def _callback_RESP_OK(self, request):
+    def _callback_RESP_OK(self, request: SIP.SIPMessage) -> None:
         debug("OK recieved")
         call_id = request.headers['Call-ID']
         if call_id not in self.calls:
@@ -494,7 +497,7 @@ class VoIPPhone():
         ack = self.sip.genAck(request)
         self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
 
-    def _callback_RESP_NotFound(self, request):
+    def _callback_RESP_NotFound(self, request: SIP.SIPMessage) -> None:
         debug("Not Found recieved, invalid number called?")
         call_id = request.headers['Call-ID']
         if call_id not in self.calls:
@@ -506,7 +509,7 @@ class VoIPPhone():
         ack = self.sip.genAck(request)
         self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
 
-    def _callback_RESP_Unavailable(self, request):
+    def _callback_RESP_Unavailable(self, request: SIP.SIPMessage) -> None:
         debug("Service Unavailable recieved")
         call_id = request.headers['Call-ID']
         if call_id not in self.calls:
@@ -518,9 +521,9 @@ class VoIPPhone():
         ack = self.sip.genAck(request)
         self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
 
-    def _create_Call(self, request, sess_id):
+    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> None:
         '''
-        create VoIP call object. Should be separated to enable better
+        Create VoIP call object. Should be separated to enable better
         subclassing.
         '''
         call_id = request.headers['Call-ID']

@@ -1,6 +1,6 @@
 from enum import Enum, IntEnum
 from threading import Timer, Lock
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 import pyVoIP
 import hashlib
 import socket
@@ -10,6 +10,10 @@ import time
 import uuid
 import select
 import warnings
+
+
+if TYPE_CHECKING:
+    from pyVoIP import RTP
 
 
 __all__ = [
@@ -678,7 +682,8 @@ class SIPMessage():
             self.body[header] = data
 
     @staticmethod
-    def parse_raw_header(headers_raw: List[bytes], handle: Callable) -> None:
+    def parse_raw_header(headers_raw: List[bytes],
+                         handle: Callable[[str, str], None]) -> None:
         headers: Dict[str, Any] = {'Via': []}
         # Only use first occurance of VIA header field;
         # got second VIA from Kamailio running in DOCKER
@@ -695,7 +700,8 @@ class SIPMessage():
             handle(key, val)
 
     @staticmethod
-    def parse_raw_body(body: bytes, handle: Callable) -> None:
+    def parse_raw_body(body: bytes,
+                       handle: Callable[[str, str], None]) -> None:
         if len(body) > 0:
             body_raw = body.split(b'\r\n')
             for x in body_raw:
@@ -778,7 +784,7 @@ class SIPClient():
 
         self.urnUUID = self.gen_urn_uuid()
 
-        self.registerThread = None
+        self.registerThread: Optional[Timer] = None
         self.recvLock = Lock()
 
     def recv(self) -> None:
@@ -849,7 +855,8 @@ class SIPClient():
             else:
                 self.callCallback(message)
         elif message.method == "BYE":
-            self.callCallback(message)
+            # TODO: If callCallback is None, the call doesn't exist, 481
+            self.callCallback(message)  # type: ignore
             response = self.genOk(message)
             try:
                 # BYE comes from client cause server only acts as mediator
@@ -866,7 +873,8 @@ class SIPClient():
         elif message.method == "ACK":
             return
         elif message.method == "CANCEL":
-            self.callCallback(message)
+            # TODO: If callCallback is None, the call doesn't exist, 481
+            self.callCallback(message)  # type: ignore
             response = self.genOk(message)
             self.out.sendto(response.encode('utf8'), (self.server, self.port))
         else:
@@ -907,8 +915,8 @@ class SIPClient():
 
     def gen_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.next()).encode('utf8'))
-        hash = hash.hexdigest()
-        return f"{hash[0:32]}@{self.myIP}:{self.myPort}"
+        hhash = hash.hexdigest()
+        return f"{hhash[0:32]}@{self.myIP}:{self.myPort}"
 
     def lastCallID(self) -> str:
         warnings.warn("lastCallID is deprecated due to PEP8 compliance. " +
@@ -918,8 +926,8 @@ class SIPClient():
 
     def gen_last_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.current() - 1).encode('utf8'))
-        hash = hash.hexdigest()
-        return f"{hash[0:32]}@{self.myIP}:{self.myPort}"
+        hhash = hash.hexdigest()
+        return f"{hhash[0:32]}@{self.myIP}:{self.myPort}"
 
     def genTag(self) -> str:
         warnings.warn("genTag is deprecated due to PEP8 compliance. " +
@@ -927,12 +935,13 @@ class SIPClient():
         return self.gen_tag()
 
     def gen_tag(self) -> str:
-        while True:
-            tag = str(random.randint(1, 4294967296)).encode('utf8')
-            tag = hashlib.md5(tag).hexdigest()[0:8]
+        while self.NSD:
+            rand = str(random.randint(1, 4294967296)).encode('utf8')
+            tag = hashlib.md5(rand).hexdigest()[0:8]
             if tag not in self.tags:
                 self.tags.append(tag)
                 return tag
+        return ""
 
     def genSIPVersionNotSupported(self, request: SIPMessage) -> str:
         warnings.warn("genSIPVersionNotSupported is deprecated " +
@@ -979,7 +988,7 @@ class SIPClient():
 
         return response
 
-    def genBranch(self, length=32):
+    def genBranch(self, length=32) -> str:
         """
         Generate unique branch id according to
         https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
@@ -989,7 +998,7 @@ class SIPClient():
                       stacklevel=2)
         return self.gen_branch(length)
 
-    def gen_branch(self, length=32):
+    def gen_branch(self, length=32) -> str:
         '''
         Generate unique branch id according to
         https://datatracker.ietf.org/doc/html/rfc3261#section-8.1.1.7
@@ -997,20 +1006,20 @@ class SIPClient():
         branchid = uuid.uuid4().hex[:length - 7]
         return f"z9hG4bK{branchid}"
 
-    def gen_urn_uuid(self):
+    def gen_urn_uuid(self) -> str:
         '''
         Generate client instance specific urn:uuid
         '''
         return str(uuid.uuid4()).upper()
 
-    def genFirstRequest(self, deregister=False):
+    def genFirstRequest(self, deregister=False) -> str:
         warnings.warn("genFirstResponse is deprecated " +
                       "due to PEP8 compliance. " +
                       "Use gen_first_response instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_first_response(deregister)
 
-    def gen_first_response(self, deregister=False):
+    def gen_first_response(self, deregister=False) -> str:
         regRequest = f'REGISTER sip:{self.server} SIP/2.0\r\n'
         regRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};' + \
                       f'branch={self.genBranch()};rport\r\n'
@@ -1037,13 +1046,13 @@ class SIPClient():
 
         return regRequest
 
-    def genSubscribe(self, response):
+    def genSubscribe(self, response: SIPMessage) -> str:
         warnings.warn("genSubscribe is deprecated due to PEP8 compliance. " +
                       "Use gen_subscribe instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_subscribe(response)
 
-    def gen_subscribe(self, response):
+    def gen_subscribe(self, response: SIPMessage) -> str:
         subRequest = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
         subRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};' + \
                       f'branch={self.genBranch()};rport\r\n'
@@ -1068,13 +1077,13 @@ class SIPClient():
 
         return subRequest
 
-    def genRegister(self, request, deregister=False):
+    def genRegister(self, request: SIPMessage, deregister=False) -> str:
         warnings.warn("genRegister is deprecated due to PEP8 compliance. " +
                       "Use gen_register instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_register(request, deregister)
 
-    def gen_register(self, request, deregister=False):
+    def gen_register(self, request: SIPMessage, deregister=False) -> str:
         response = str(self.genAuthorization(request), 'utf8')
         nonce = request.authentication['nonce']
         realm = request.authentication['realm']
@@ -1108,13 +1117,13 @@ class SIPClient():
 
         return regRequest
 
-    def genBusy(self, request):
+    def genBusy(self, request: SIPMessage) -> str:
         warnings.warn("genBusy is deprecated due to PEP8 compliance. " +
                       "Use gen_busy instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_busy(request)
 
-    def gen_busy(self, request):
+    def gen_busy(self, request: SIPMessage) -> str:
         response = "SIP/2.0 486 Busy Here\r\n"
         response += self._gen_response_via_header(request)
         response += f"From: {request.headers['From']['raw']};tag=" + \
@@ -1133,12 +1142,12 @@ class SIPClient():
 
         return response
 
-    def genOk(self, request):
+    def genOk(self, request: SIPMessage) -> str:
         warnings.warn("genOk is deprecated due to PEP8 compliance. " +
                       "Use gen_ok instead.", DeprecationWarning, stacklevel=2)
         return self.gen_ok(request)
 
-    def gen_ok(self, request):
+    def gen_ok(self, request: SIPMessage) -> str:
         okResponse = "SIP/2.0 200 OK\r\n"
         okResponse += self._gen_response_via_header(request)
         okResponse += f"From: {request.headers['From']['raw']};tag=" + \
@@ -1154,13 +1163,13 @@ class SIPClient():
 
         return okResponse
 
-    def genRinging(self, request):
+    def genRinging(self, request: SIPMessage) -> str:
         warnings.warn("genRinging is deprecated due to PEP8 compliance. " +
                       "Use gen_ringing instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_ringing(request)
 
-    def gen_ringing(self, request):
+    def gen_ringing(self, request: SIPMessage) -> str:
         tag = self.genTag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._gen_response_via_header(request)
@@ -1180,13 +1189,17 @@ class SIPClient():
 
         return regRequest
 
-    def genAnswer(self, request, sess_id, ms, sendtype):
+    def genAnswer(self, request: SIPMessage, sess_id: str,
+                  ms: Dict[int, Dict[int, 'RTP.PayloadType']],
+                  sendtype: 'RTP.TransmitType') -> str:
         warnings.warn("genAnswer is deprecated due to PEP8 compliance. " +
                       "Use gen_answer instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_answer(request, sess_id, ms, sendtype)
 
-    def gen_answer(self, request, sess_id, ms, sendtype):
+    def gen_answer(self, request: SIPMessage, sess_id: str,
+                   ms: Dict[int, Dict[int, 'RTP.PayloadType']],
+                   sendtype: 'RTP.TransmitType') -> str:
         # Generate body first for content length
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
@@ -1231,13 +1244,19 @@ class SIPClient():
 
         return regRequest
 
-    def genInvite(self, number, sess_id, ms, sendtype, branch, call_id):
+    def genInvite(self, number: str, sess_id: str,
+                  ms: Dict[int, Dict[str, 'RTP.PayloadType']],
+                  sendtype: 'RTP.TransmitType', branch: str, call_id: str
+                  ) -> str:
         warnings.warn("genInvite is deprecated due to PEP8 compliance. " +
                       "Use gen_invite instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_invite(number, sess_id, ms, sendtype, branch, call_id)
 
-    def gen_invite(self, number, sess_id, ms, sendtype, branch, call_id):
+    def gen_invite(self, number: str, sess_id: str,
+                   ms: Dict[int, Dict[str, 'RTP.PayloadType']],
+                   sendtype: 'RTP.TransmitType', branch: str, call_id: str
+                   ) -> str:
         # Generate body first for content length
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
@@ -1281,13 +1300,13 @@ class SIPClient():
 
         return invRequest
 
-    def genBye(self, request):
+    def genBye(self, request: SIPMessage) -> str:
         warnings.warn("genBye is deprecated due to PEP8 compliance. " +
                       "Use gen_bye instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_bye(request)
 
-    def gen_bye(self, request):
+    def gen_bye(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers['Call-ID']]
         c = request.headers['Contact'].strip('<').strip('>')
         byeRequest = f"BYE {c} SIP/2.0\r\n"
@@ -1316,12 +1335,12 @@ class SIPClient():
 
         return byeRequest
 
-    def genAck(self, request):
+    def genAck(self, request: SIPMessage) -> str:
         warnings.warn("genAck is deprecated due to PEP8 compliance. " +
                       "Use gen_ack instead.", DeprecationWarning, stacklevel=2)
         return self.gen_ack(request)
 
-    def gen_ack(self, request):
+    def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers['Call-ID']]
         t = request.headers['To']['raw'].strip('<').strip('>')
         ackMessage = f"ACK {t} SIP/2.0\r\n"
@@ -1337,7 +1356,7 @@ class SIPClient():
 
         return ackMessage
 
-    def _gen_response_via_header(self, request):
+    def _gen_response_via_header(self, request: SIPMessage) -> str:
         via = ''
         for h_via in request.headers['Via']:
             v_line = 'Via: SIP/2.0/UDP ' + \
@@ -1355,7 +1374,8 @@ class SIPClient():
             via += v_line
         return via
 
-    def invite(self, number, ms, sendtype):
+    def invite(self, number: str, ms: Dict[int, Dict[str, 'RTP.PayloadType']],
+               sendtype: 'RTP.TransmitType') -> Tuple[SIPMessage, str, int]:
         branch = "z9hG4bK" + self.genCallID()[0:25]
         call_id = self.genCallID()
         sess_id = self.sessID.next()
@@ -1401,17 +1421,17 @@ class SIPClient():
 
         return SIPMessage(invite.encode('utf8')), call_id, sess_id
 
-    def bye(self, request):
+    def bye(self, request: SIPMessage) -> None:
         message = self.genBye(request)
         # TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode('utf8'), (self.server, self.port))
 
-    def deregister(self):
+    def deregister(self) -> bool:
         self.recvLock.acquire()
         firstRequest = self.genFirstRequest(deregister=True)
         self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
 
-        self.out.setblocking(0)
+        self.out.setblocking(False)
 
         ready = select.select([self.out], [], [], self.register_timeout)
         if ready[0]:
@@ -1453,15 +1473,17 @@ class SIPClient():
             return self.deregister()
 
         if response.status == SIPStatus.OK:
+            self.recvLock.release()
             return True
         self.recvLock.release()
+        return False
 
-    def register(self):
+    def register(self) -> bool:
         self.recvLock.acquire()
         firstRequest = self.genFirstRequest()
         self.out.sendto(firstRequest.encode('utf8'), (self.server, self.port))
 
-        self.out.setblocking(0)
+        self.out.setblocking(False)
 
         ready = select.select([self.out], [], [], self.register_timeout)
         if ready[0]:
@@ -1542,14 +1564,14 @@ class SIPClient():
                                           f"SIP server {self.server}:" +
                                           f"{self.myPort}")
 
-    def _handle_bad_request(self):
+    def _handle_bad_request(self) -> None:
         # Bad Request
         # TODO: implement
         # TODO: check if broken connection can be brought back
         # with new urn:uuid or reply with expire 0
         debug('Bad Request')
 
-    def subscribe(self, lastresponse):
+    def subscribe(self, lastresponse: SIPMessage) -> None:
         # TODO: check if needed and maybe implement fully
         self.recvLock.acquire()
 
@@ -1558,6 +1580,6 @@ class SIPClient():
 
         response = SIPMessage(self.s.recv(8192))
 
-        debug(f'Got response to subscribe: {response.heading}')
+        debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
 
         self.recvLock.release()

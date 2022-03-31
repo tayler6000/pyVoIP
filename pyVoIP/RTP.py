@@ -76,7 +76,7 @@ class PayloadType(Enum):
         return self._rate
 
     @rate.setter
-    def rate(self, value: int):
+    def rate(self, value: int) -> None:
         self._rate = value
 
     @property
@@ -84,7 +84,7 @@ class PayloadType(Enum):
         return self._channel
 
     @channel.setter
-    def channel(self, value: int):
+    def channel(self, value: int) -> None:
         self._channel = value
 
     @property
@@ -92,10 +92,10 @@ class PayloadType(Enum):
         return self._description
 
     @description.setter
-    def description(self, value: str):
+    def description(self, value: str) -> None:
         self._description = value
 
-    def __int__(self):
+    def __int__(self) -> int:
         try:
             return int(self.value)
         except ValueError:
@@ -103,8 +103,8 @@ class PayloadType(Enum):
         raise DynamicPayloadType(self.description +
                                  " is a dynamically assigned payload")
 
-    def __str__(self):
-        if type(self.value) == int:
+    def __str__(self) -> str:
+        if isinstance(self.value, int):
             return self.description
         return str(self.value)
 
@@ -280,7 +280,7 @@ class RTPMessage():
 class RTPClient():
     def __init__(self, assoc: Dict[int, PayloadType], inIP: str, inPort: int,
                  outIP: str, outPort: int, sendrecv: TransmitType,
-                 dtmf: Optional[Callable] = None):
+                 dtmf: Optional[Callable[[str], None]] = None):
         self.NSD = True
         # Example: {0: PayloadType.PCMU, 101: PayloadType.EVENT}
         self.assoc = assoc
