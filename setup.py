@@ -3,7 +3,7 @@ from setuptools import setup
 
 
 with open("README.md", "r", encoding='utf-8') as f:
-  long_description = f.read()
+    long_description = f.read()
 
 setup(
     name='pyVoIP',
@@ -31,5 +31,6 @@ setup(
         "Topic :: Communications :: Telephony"
     ],
     packages=find_packages(),
+    package_data={'pyVoIP': ['py.typed']},
     python_requires=">=3.6"
 )
