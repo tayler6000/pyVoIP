@@ -31,5 +31,6 @@ setup(
         "Topic :: Communications :: Telephony"
     ],
     packages=find_packages(),
+    package_data={'pyVoIP': ['py.typed']},
     python_requires=">=3.6"
 )
