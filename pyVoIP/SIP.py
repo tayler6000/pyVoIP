@@ -646,14 +646,14 @@ class SIPMessage():
                         v = re.split(" |/", value)
                         for t in self.body['m']:
                             if v[0] in t['methods']:
-                                index = self.body['m'].index(t)
+                                index = int(self.body['m'].index(t))
                                 break
                         if len(v) == 4:
                             encoding = v[3]
                         else:
                             encoding = None
 
-                        self.body['m'][int(index)]['attributes'][v[0]]['rtpmap'] = {   # noqa: E501
+                        self.body['m'][index]['attributes'][v[0]]['rtpmap'] = {
                             'id': v[0], 'name': v[1], 'frequency': v[2],
                             'encoding': encoding
                         }
@@ -663,10 +663,10 @@ class SIPMessage():
                         d = value.split(' ')
                         for t in self.body['m']:
                             if d[0] in t['methods']:
-                                index = self.body['m'].index(t)
+                                index = int(self.body['m'].index(t))
                                 break
 
-                        self.body['m'][int(index)]['attributes'][d[0]]['fmtp'] = {  # noqa: E501
+                        self.body['m'][index]['attributes'][d[0]]['fmtp'] = {
                             'id': d[0], 'settings': d[1:]
                         }
                     else:
