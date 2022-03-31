@@ -1,6 +1,6 @@
 from enum import Enum, IntEnum
 from threading import Timer, Lock
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 import pyVoIP
 import hashlib
 import socket
@@ -338,12 +338,12 @@ class SIPMessage():
     def __init__(self, data: bytes):
         self.SIPCompatibleVersions = pyVoIP.SIPCompatibleVersions
         self.SIPCompatibleMethods = pyVoIP.SIPCompatibleMethods
-        self.heading = ""
-        self.type = None
-        self.status = 0
-        self.headers = {'Via': []}
+        self.heading = b""
+        self.type: Optional[SIPMessageType] = None
+        self.status = SIPStatus(491)
+        self.headers: Dict[str, Any] = {'Via': []}
         self.body: Dict[str, Any] = {}
-        self.authentication = {}
+        self.authentication: Dict[str, str] = {}
         self.raw = data
         self.parse(data)
 
@@ -748,20 +748,20 @@ class SIPMessage():
 
 class SIPClient():
 
-    def __init__(self, server, port, username, password, myIP, myPort=5060,
-                 callCallback=None):
+    def __init__(self, server: str, port: int, username: str, password: str,
+                 myIP="0.0.0.0", myPort=5060,
+                 callCallback: Optional[Callable[[SIPMessage],
+                                                 None]] = None):
         self.NSD = False
         self.server = server
         self.port = port
-        self.hostname = socket.gethostname()
-        self.myIP = socket.gethostbyname(self.hostname)
         self.myIP = myIP
         self.username = username
         self.password = password
 
         self.callCallback = callCallback
 
-        self.tags = []
+        self.tags: List[str] = []
         self.tagLibrary = {'register': self.genTag()}
 
         self.myPort = myPort
@@ -781,7 +781,7 @@ class SIPClient():
         self.registerThread = None
         self.recvLock = Lock()
 
-    def recv(self):
+    def recv(self) -> None:
         while self.NSD:
             self.recvLock.acquire()
             self.s.setblocking(False)
@@ -815,13 +815,13 @@ class SIPClient():
             self.s.setblocking(True)
             self.recvLock.release()
 
-    def parseMessage(self, message):
+    def parseMessage(self, message: SIPMessage) -> None:
         warnings.warn("parseMessage is deprecated due to PEP8 compliance. " +
                       "Use parse_message instead.", DeprecationWarning,
                       stacklevel=2)
         return self.parse_message(message)
 
-    def parse_message(self, message):
+    def parse_message(self, message: SIPMessage) -> None:
         if message.type != SIPMessageType.MESSAGE:
             if message.status == SIPStatus.OK:
                 if self.callCallback is not None:
@@ -872,7 +872,7 @@ class SIPClient():
         else:
             debug("TODO: Add 400 Error on non processable request")
 
-    def start(self):
+    def start(self) -> None:
         if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
@@ -885,7 +885,7 @@ class SIPClient():
         t.name = "SIP Recieve"
         t.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.NSD = False
         if self.registerThread:
             # Only run if registerThread exists
@@ -893,40 +893,40 @@ class SIPClient():
             self.deregister()
         self._close_sockets()
 
-    def _close_sockets(self):
+    def _close_sockets(self) -> None:
         if self.s:
             self.s.close()
         if self.out:
             self.out.close()
 
-    def genCallID(self):
+    def genCallID(self) -> str:
         warnings.warn("genCallID is deprecated due to PEP8 compliance. " +
                       "Use gen_call_id instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_call_id()
 
-    def gen_call_id(self):
+    def gen_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.next()).encode('utf8'))
         hash = hash.hexdigest()
         return f"{hash[0:32]}@{self.myIP}:{self.myPort}"
 
-    def lastCallID(self):
+    def lastCallID(self) -> str:
         warnings.warn("lastCallID is deprecated due to PEP8 compliance. " +
                       "Use gen_last_call_id instead.", DeprecationWarning,
                       stacklevel=2)
         return self.gen_last_call_id()
 
-    def gen_last_call_id(self):
+    def gen_last_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.current() - 1).encode('utf8'))
         hash = hash.hexdigest()
         return f"{hash[0:32]}@{self.myIP}:{self.myPort}"
 
-    def genTag(self):
+    def genTag(self) -> str:
         warnings.warn("genTag is deprecated due to PEP8 compliance. " +
                       "Use gen_tag instead.", DeprecationWarning, stacklevel=2)
         return self.gen_tag()
 
-    def gen_tag(self):
+    def gen_tag(self) -> str:
         while True:
             tag = str(random.randint(1, 4294967296)).encode('utf8')
             tag = hashlib.md5(tag).hexdigest()[0:8]
@@ -934,14 +934,14 @@ class SIPClient():
                 self.tags.append(tag)
                 return tag
 
-    def genSIPVersionNotSupported(self, request):
+    def genSIPVersionNotSupported(self, request: SIPMessage) -> str:
         warnings.warn("genSIPVersionNotSupported is deprecated " +
                       "due to PEP8 compliance. " +
                       "Use gen_sip_version_not_supported instead.",
                       DeprecationWarning, stacklevel=2)
         return self.gen_sip_version_not_supported(request)
 
-    def gen_sip_version_not_supported(self, request):
+    def gen_sip_version_not_supported(self, request: SIPMessage) -> str:
         # TODO: Add Supported
         response = "SIP/2.0 505 SIP Version Not Supported\r\n"
         response += self._gen_response_via_header(request)
@@ -960,13 +960,13 @@ class SIPClient():
 
         return response
 
-    def genAuthorization(self, request):
+    def genAuthorization(self, request: SIPMessage) -> bytes:
         warnings.warn("genAuthorization is deprecated " +
                       "due to PEP8 compliance. Use gen_authorization instead.",
                       DeprecationWarning, stacklevel=2)
         return self.gen_authorization(request)
 
-    def gen_authorization(self, request):
+    def gen_authorization(self, request: SIPMessage) -> bytes:
         realm = request.authentication['realm']
         HA1 = self.username + ':' + realm + ':' + self.password
         HA1 = hashlib.md5(HA1.encode('utf8')).hexdigest()

@@ -380,7 +380,8 @@ class VoIPCall():
 class VoIPPhone():
 
     def __init__(self, server: str, port: int, username: str, password: str,
-                 myIP: str, callCallback: Optional[Callable] = None,
+                 myIP="0.0.0.0",
+                 callCallback: Optional[Callable[['VoIPCall'], None]] = None,
                  sipPort=5060, rtpPortLow=10000, rtpPortHigh=20000):
         if rtpPortLow > rtpPortHigh:
             raise InvalidRangeError("'rtpPortHigh' must be >= 'rtpPortLow'")
@@ -393,8 +394,6 @@ class VoIPPhone():
 
         self.server = server
         self.port = port
-        self.hostname = socket.gethostname()
-        self.myIP = socket.gethostbyname(self.hostname)
         self.myIP = myIP
         self.username = username
         self.password = password
