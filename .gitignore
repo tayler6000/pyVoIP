@@ -1,2 +1,3 @@
 dist/
 pyVoIP.egg-info
+__pycache__
