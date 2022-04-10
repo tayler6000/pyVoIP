@@ -55,7 +55,7 @@ class Counter:
 class SIPStatus(Enum):
 
     def __new__(cls, value: int, phrase: str = '', description: str = ''):
-        obj = int.__new__(cls, value)
+        obj = object.__new__(cls)
         obj._value_ = value
 
         obj.phrase = phrase
@@ -809,7 +809,7 @@ class SIPClient:
         self.out.sendto(message.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
     def get_my_ip(self):
-        return self.my_public_ip if self.myIP else self.myIP
+        return self.my_public_ip if self.my_public_ip else self.myIP
 
     def get_my_port(self):
         return self.my_public_port if self.my_public_port else self.myPort
@@ -1003,7 +1003,7 @@ class SIPClient:
 
         return response
 
-    def genBranch(self, length=32) -> str:
+    def gen_branch(self, length=32) -> str:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         """
@@ -1055,7 +1055,7 @@ class SIPClient:
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
         subRequest = f'SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n'
         subRequest += f'Via: SIP/2.0/UDP {self.myIP}:{self.myPort};' + \
-                      f'branch={self.genBranch()};rport\r\n'
+                      f'branch={self.gen_branch()};rport\r\n'
         subRequest += f'From: "{self.username}" ' + \
                       f'<sip:{self.username}@{self.server}>;tag=' + \
                       f'{self.gen_tag()}\r\n'
