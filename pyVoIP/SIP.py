@@ -600,7 +600,7 @@ class SIPClient():
     return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
   
   def genTag(self):
-    while self.NSD:
+    while True:  # Keep as True instead of NSD so it can generate a tag on deregister.
       tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
       if tag not in self.tags:
         self.tags.append(tag)
