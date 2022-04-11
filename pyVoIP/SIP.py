@@ -570,7 +570,7 @@ class SIPClient():
   
   def start(self):
     if self.NSD == True:
-      raise RunTimeError("Attempted to start already started SIPClient")
+      raise RuntimeError("Attempted to start already started SIPClient")
     self.NSD = True
     self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     #self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -592,7 +592,7 @@ class SIPClient():
     return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
   
   def genTag(self):
-    while True:
+    while self.NSD:
       tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
       if tag not in self.tags:
         self.tags.append(tag)
