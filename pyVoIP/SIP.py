@@ -589,10 +589,12 @@ class SIPClient():
     self._close_sockets()
 
   def _close_sockets(self):
-    if self.s:
-      self.s.close()
-    if self.out:
-      self.out.close()
+    if hasattr(self, 's'):
+      if self.s:
+        self.s.close()
+    if hasattr(self, 'out'):
+      if self.out:
+        self.out.close()
     
   def genCallID(self):
     return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
