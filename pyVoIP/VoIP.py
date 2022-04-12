@@ -179,7 +179,7 @@ class VoIPCall:
                 # TODO: Check IPv4/IPv6
                 c = RTP.RTPClient(codecs, ip, port,
                                   request.body['c'][ii]['address'], baseport + ii,
-                                  self.sendmode, dtmf=self.dtmfCallback)
+                                  self.sendmode, dtmf=self.dtmf_callback)
                 self.RTPClients.append(c)
 
     def dtmf_callback(self, code: str) -> None:

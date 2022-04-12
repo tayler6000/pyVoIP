@@ -492,7 +492,7 @@ class SIPMessage:
             elif header == "o":
                 # SDP 5.2 Origin
                 # o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address> # noqa: E501
-                data = data.split(' ')
+                d = data.split(' ')
                 self.body[header] = {
                                         'username': d[0], 'id': d[1],
                                         'version': d[2],
@@ -523,7 +523,7 @@ class SIPMessage:
                 # c=<nettype> <addrtype> <connection-address>
                 if 'c' not in self.body:
                     self.body['c'] = []
-                data = data.split(' ')
+                d = data.split(' ')
                 # TTL Data and Multicast addresses may be specified.
                 # For IPv4 its listed as addr/ttl/number of addresses.
                 # c=IN IP4 224.2.1.1/127/3 means:
@@ -658,31 +658,32 @@ class SIPMessage:
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>] # noqa: E501
                         v = re.split(" |/", value)
-                        for t in self.body['m']:
-                            if v[0] in t['methods']:
-                                index = int(self.body['m'].index(t))
-                                break
-                        if len(v) == 4:
-                            encoding = v[3]
-                        else:
-                            encoding = None
+                        if 'm' in self.body:
+                            for t in self.body['m']:
+                                if v[0] in t['methods']:
+                                    index = int(self.body['m'].index(t))
+                                    break
+                            if len(v) == 4:
+                                encoding = v[3]
+                            else:
+                                encoding = None
 
-                        self.body['m'][index]['attributes'][v[0]]['rtpmap'] = {
-                            'id': v[0], 'name': v[1], 'frequency': v[2],
-                            'encoding': encoding
-                        }
+                            self.body['m'][index]['attributes'][v[0]]['rtpmap'] = {
+                                'id': v[0], 'name': v[1], 'frequency': v[2],
+                                'encoding': encoding
+                            }
 
                     elif attribute == "fmtp":
                         # a=fmtp:<format> <format specific parameters>
                         d = value.split(' ')
-                        for t in self.body['m']:
-                            if d[0] in t['methods']:
-                                index = int(self.body['m'].index(t))
-                                break
+                        if 'm' in self.body:
+                            for t in self.body['m']:
+                                if d[0] in t['methods']:
+                                    index = int(self.body['m'].index(t))
+                                    break
 
-                        self.body['m'][index]['attributes'][d[0]]['fmtp'] = {
-                            'id': d[0], 'settings': d[1:]
-                        }
+                            self.body['m'][index]['attributes'][d[0]]['fmtp'] = {
+                                'id': d[0], 'settings': d[1:]}
                     else:
                         self.body['a'][attribute] = value
                 else:
