@@ -781,6 +781,7 @@ class SIPClient:
         self.callCallback = callCallback
 
         self.tags: List[str] = []
+        # Why this call? When self.NSD = False this tag will be empty
         self.tagLibrary = {'register': self.gen_tag()}
 
         self.myPort = myPort
@@ -809,7 +810,8 @@ class SIPClient:
         self.out.sendto(message.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
     def get_my_ip(self):
-        return self.my_public_ip if self.my_public_ip else self.myIP
+        # return self.my_public_ip if self.my_public_ip else self.myIP
+        return self.my_public_ip if self.myIP else self.myIP
 
     def get_my_port(self):
         return self.my_public_port if self.my_public_port else self.myPort
@@ -911,7 +913,8 @@ class SIPClient:
 
     def start(self) -> None:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start '
+              f'IP {self.myIP} Port {self.myPort}')
         if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
@@ -959,8 +962,9 @@ class SIPClient:
 
     def gen_tag(self) -> str:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
-              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
-        while self.NSD:
+              f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start '
+              f'NSD {self.NSD}')
+        while True:  # self.NSD:
             rand = str(random.randint(1, 4294967296)).encode('utf8')
             tag = hashlib.md5(rand).hexdigest()[0:8]
             if tag not in self.tags:
