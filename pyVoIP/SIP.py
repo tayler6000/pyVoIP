@@ -425,7 +425,8 @@ class SIPMessage():
             if len(info) >= 2:
                 tag = info[1]
             raw = info[0]
-            contact = raw.split('<sip:')
+            # fix issue 41 part 1
+            contact = re.split(r"<?sip:", raw)
             contact[0] = contact[0].strip('"').strip("'")
             address = contact[1].strip('>')
             if len(address.split('@')) == 2:
@@ -451,7 +452,9 @@ class SIPMessage():
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
             data = data.replace("Digest", "")
-            info = data.split(",")
+            #  fix issue 41 part 2
+            #  add blank to avoid the split of qop="auth,auth-int"
+            info = data.split(", ")
             header_data = {}
             for x in info:
                 x = x.strip()
