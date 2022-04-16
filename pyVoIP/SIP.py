@@ -589,11 +589,9 @@ class SIPClient():
     self._close_sockets()
 
   def _close_sockets(self):
-    if hasattr(self, 's'):
-      if self.s:
+    if hasattr(self, 's') and self.s:
         self.s.close()
-    if hasattr(self, 'out'):
-      if self.out:
+    if hasattr(self, 'out') and self.out:
         self.out.close()
     
   def genCallID(self):

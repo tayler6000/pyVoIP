@@ -122,7 +122,8 @@ class VoIPCall():
         self.assignedPorts[m] = self.ms[m]
 
   def __del__(self):
-    self.phone.release_ports(call=self)
+    if hasattr(self, 'phone'):
+      self.phone.release_ports(call=self)
 
   def dtmfCallback(self, code):
     self.dtmfLock.acquire()
@@ -315,7 +316,7 @@ class VoIPPhone():
               sess_id = proposed
           message = self.sip.genRinging(request)
           self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-          self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP, portRange=(self.rtpPortLow, self.rtpPortHigh))
+          self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP))
           try:
             t = Timer(1, self.callCallback, [self.calls[call_id]])
             t.name = "Phone Call: "+call_id
@@ -362,12 +363,19 @@ class VoIPPhone():
   def request_port(self, blocking=True) -> int:
     ports_available = [port for port in range(self.rtpPortLow,
                        self.rtpPortHigh + 1) if port not in self.assignedPorts]
+    if len(ports_available) == 0:
+      # If no ports are available attempt to cleanup any missed calls.
+      self.release_ports()
+      ports_available = [port for port in range(self.rtpPortLow,
+                         self.rtpPortHigh + 1) if (port not in
+                                                   self.assignedPorts)]
 
     while self.NSD and blocking and len(ports_available) == 0:
       ports_available = [port for port in range(self.rtpPortLow,
                          self.rtpPortHigh + 1) if (port not in
                                                    self.assignedPorts)]
       time.sleep(.5)
+      self.release_ports()
 
     if len(ports_available) == 0:
         raise NoPortsAvailableError("No ports were available to be assigned")
