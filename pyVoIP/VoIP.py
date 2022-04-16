@@ -316,7 +316,7 @@ class VoIPPhone():
               sess_id = proposed
           message = self.sip.genRinging(request)
           self.sip.out.sendto(message.encode('utf8'), (self.server, self.port))
-          self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP))
+          self.calls[call_id] = VoIPCall(self, CallState.RINGING, request, sess_id, self.myIP)
           try:
             t = Timer(1, self.callCallback, [self.calls[call_id]])
             t.name = "Phone Call: "+call_id
