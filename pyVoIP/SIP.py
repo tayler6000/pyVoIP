@@ -570,7 +570,7 @@ class SIPClient():
   
   def start(self):
     if self.NSD == True:
-      raise RunTimeError("Attempted to start already started SIPClient")
+      raise RuntimeError("Attempted to start already started SIPClient")
     self.NSD = True
     self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     #self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -583,16 +583,22 @@ class SIPClient():
      
   def stop(self):
     self.NSD = False
-    self.registerThread.cancel()
-    self.deregister()
-    self.s.close()
-    self.out.close()
+    if self.registerThread:
+      self.registerThread.cancel()
+      self.deregister()
+    self._close_sockets()
+
+  def _close_sockets(self):
+    if hasattr(self, 's') and self.s:
+        self.s.close()
+    if hasattr(self, 'out') and self.out:
+        self.out.close()
     
   def genCallID(self):
     return hashlib.sha256(str(self.callID.next()).encode('utf8')).hexdigest()[0:32]+"@"+self.myIP+":"+str(self.myPort)
   
   def genTag(self):
-    while True:
+    while True:  # Keep as True instead of NSD so it can generate a tag on deregister.
       tag = hashlib.md5(str(random.randint(1, 4294967296)).encode('utf8')).hexdigest()[0:8]
       if tag not in self.tags:
         self.tags.append(tag)

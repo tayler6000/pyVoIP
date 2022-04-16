@@ -15,6 +15,9 @@ There are two errors under ``pyVoIP.VoIP``.
   
 *exception* VoIP.\ **InvalidRangeError**
   This is thrown by :ref:`VoIPPhone` when you define the rtpPort ranges as rtpPortLow > rtpPortHigh.  However this is not checked by :ref:`VoIPCall`, so if you are using your own class instead of VoIPPhone, make sure these ranges are correct.
+  
+*exception* VoIP.\ **NoPortsAvailableError**
+  This is thrown when a call is attempting to be initiated but no ports are available.
 
 Enums
 ***********
@@ -52,8 +55,10 @@ VoIPCall
 
 The VoIPCall class is used to represent a single VoIP Session, which may be to multiple :term:`clients<client>`.
 
-*class* VoIP.\ **VoIPCall**\ (phone, request, session_id, myIP, rtpPortLow, rtpPortHigh)
+*class* VoIP.\ **VoIPCall**\ (phone, callstate, request, session_id, myIP, ms)
       The *phone* argument is the initating instance of :ref:`VoIPPhone`.
+     
+      The *callstate* arguement is the initiating :ref:`CallState<callstate>`.
      
       The *request* argument is the :ref:`SIPMessage` representation of the SIP INVITE request from the VoIP server.
      
@@ -61,7 +66,8 @@ The VoIPCall class is used to represent a single VoIP Session, which may be to m
      
       The *myIP* argument is the IP address it will pass to :ref:`RTPClient`'s to bind to.
      
-      The *rtpPortLow* and *rtpPortHigh* arguments are used to generate random ports to use for audio transfer.  Per RFC 4566 Sections `5.7 <https://tools.ietf.org/html/rfc4566#section-5.7>`_ and `5.14 <https://tools.ietf.org/html/rfc4566#section-5.14>`_, it can take multiple ports to fully communicate with other :term:`clients<client>`, as such a large range is recommended.
+      The *ms* arguement is a dictionary with int as the key and a :ref:`PayloadType<payload-type>` as the value.  This is only used when originating the call.
+     
      
     **dtmfCallback**\ (code)
       This method is called by :ref:`RTPClient`'s when a telephone-event DTMF message is received.  The *code* argument is a string.  It should be an Event in complinace with `RFC 4733 Section 3.2 <https://tools.ietf.org/html/rfc4733#section-3.2>`_.
@@ -126,10 +132,16 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
     The *rtpPortLow* and *rtpPortHigh* arguments are used to generate random ports to use for audio transfer.  Per RFC 4566 Sections `5.7 <https://tools.ietf.org/html/rfc4566#section-5.7>`_ and `5.14 <https://tools.ietf.org/html/rfc4566#section-5.14>`_, it can take multiple ports to fully communicate with other :term:`clients<client>`, as such a large range is recommended.  If an invalid range is given, a :ref:`InvalidStateError<invalidstateerror>` will be thrown.
     
   **callback**\ (request)
-    This method is called by the :ref:`SIPClient` when an INVITE or BYE request is received.  This function then creates a :ref:`VoIPCall` or terminates it respectively.  When a VoIPCall is created, it will then pass it to the *callCallback* function as an argument.  If *callCallback* is set to None, this function replies as BUSY. **This function should not be called by the** :term:`user`.
+    This method is called by the :ref:`SIPClient` when an INVITE or BYE request is received.  This method then creates a :ref:`VoIPCall` or terminates it respectively.  When a VoIPCall is created, it will then pass it to the *callCallback* function as an argument.  If *callCallback* is set to None, this function replies as BUSY. **This function should not be called by the** :term:`user`.
+    
+  **request_port**\ (blocking=True)
+    This method is called when a new port is needed to use in a :ref:`VoIPCall`.  If blocking is set to True, this will wait until a port is available.  Otherwise, it will raise NoPortsAvailableError.
+    
+  **release_ports**\ (call=None)
+    This method is called when a call ends.  If call is provided, it will only release the ports used by that :ref:`VoIPCall`.  Otherwise, it will iterate through all active calls, and release all ports that are no longer in use.
     
   **start**\ ()
-    This method starts the :ref:`SIPClient` class.
+    This method starts the :ref:`SIPClient` class.  On failure, this will automatically call stop().
     
   **stop**\ ()
     This method ends all currently ongoing calls, then stops the :ref:`SIPClient` class
