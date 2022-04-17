@@ -128,14 +128,14 @@ class VoIPCall():
                             # come up again if it happens.  However, this
                             # also resets all other warnings.
                             warnings.simplefilter("default")
-                            p = RTP.PayloadType("UNKOWN")
+                            p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
                         except KeyError:
                             # fix issue 42
                             # When rtpmap is not found, also set the found
-                            # element to UNKOWN
+                            # element to UNKNOWN
                             warnings.warn(f"RTP KeyError {x} not found.", stacklevel=20)
-                            p = RTP.PayloadType("UNKOWN")
+                            p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
 
                 if e:
