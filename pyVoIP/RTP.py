@@ -142,7 +142,7 @@ class PayloadType(Enum):
 
     # Non-codec
     EVENT = "telephone-event", 8000, 0, "telephone-event"
-    UNKOWN = "UNKOWN", 0, 0, "UNKOWN CODEC"
+    UNKOWN = "UNKNOWN", 0, 0, "UNKNOWN CODEC"
 
 
 class RTPPacketManager:

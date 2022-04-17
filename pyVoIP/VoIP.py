@@ -123,7 +123,7 @@ class VoIPCall:
                             p = RTP.PayloadType(i['attributes'][x]['rtpmap']['name'])
                             assoc[int(x)] = p
                         except ValueError:
-                            # ToDo sometimes rtpmap raise a KeyError because fmtp is set instate
+                            # sometimes rtpmap raise a KeyError because fmtp is set instate
                             pt = i['attributes'][x]['rtpmap']['name']
                             warnings.warn(f"RTP Payload type {pt} not found.",
                                           stacklevel=20)
@@ -131,13 +131,13 @@ class VoIPCall:
                             # come up again if it happens. However, this
                             # also resets all other warnings as well.
                             warnings.simplefilter("default")
-                            p = RTP.PayloadType("UNKOWN")
+                            p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
                         except KeyError:
                             # When rtpmap is not found, also set the found
-                            # element to UNKOWN
+                            # element to UNKNOWN
                             warnings.warn(f"RTP KeyError {x} not found.", stacklevel=20)
-                            p = RTP.PayloadType("UNKOWN")
+                            p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
 
                 if e:
@@ -495,7 +495,7 @@ class VoIPPhone:
               f'-- Service Unavailable received')
         call_id = request.headers['Call-ID']
         if call_id not in self.calls:
-            debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Unkown call")
+            debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} Unknown call")
             debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} TODO: Add 481 here as server "
                   f"is probably waiting for an ACK")
         self.calls[call_id].unavailable(request)

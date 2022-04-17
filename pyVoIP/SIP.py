@@ -12,7 +12,6 @@ import time
 import uuid
 import select
 import re
-import optparse
 
 if TYPE_CHECKING:
     from pyVoIP import RTP
@@ -469,7 +468,7 @@ class SIPMessage:
             self.headers[header] = int(data)
         elif header == 'WWW-Authenticate' or header == "Authorization":
             data = data.replace("Digest", "")
-            # add blank to avoid the split of qop="auth, auth-int"
+            # add blank to avoid the split of qop="auth,auth-int"
             info = data.split(", ")
             header_data = {}
             for x in info:
@@ -803,18 +802,17 @@ class SIPClient:
         self.registerThread: Optional[Timer] = None
         self.recvLock = Lock()
 
-    def send_message(self, message):
+    def send_message(self, message: str) -> None:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
               f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} '
               f'--> message sever {(self.proxy if self.proxy else self.server)} port {self.port}'
               f'\n----\n{message}\n----\n')
         self.out.sendto(message.encode('utf8'), ((self.proxy if self.proxy else self.server), self.port))
 
-    def get_my_ip(self):
-        # return self.my_public_ip if self.my_public_ip else self.myIP
-        return self.my_public_ip if self.myIP else self.myIP
+    def get_my_ip(self) -> str:
+        return self.my_public_ip if self.my_public_ip else self.myIP
 
-    def get_my_port(self):
+    def get_my_port(self) -> str:
         return self.my_public_port if self.my_public_port else self.myPort
 
     def recv(self) -> None:
