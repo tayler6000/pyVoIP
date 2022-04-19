@@ -14,6 +14,7 @@ __all__ = [
             'VoIPPhone'
           ]
 
+
 debug = pyVoIP.debug
 
 
@@ -41,10 +42,7 @@ class PhoneStatus(Enum):
 
 
 class VoIPCall:
-    '''
-    For initiating a phone call, try sending the packet and the received OK packet will be sent to the VoIPCall
-    request header.
-    '''
+
     def __init__(self, phone: "VoIPPhone", callstate: CallState,
                  request: SIP.SIPMessage, session_id: int,
                  ms: Optional[Dict[int, RTP.PayloadType]] = None,
@@ -90,10 +88,10 @@ class VoIPCall:
                     self.videoPorts += x['port_count']
                     video.append(x)
                 else:
-                    warnings.warn("Unknown media description: " + x['type'],
+                    warnings.warn(f"Unknown media description: {x['type']}",
                                   stacklevel=2)
 
-            # Ports Adjusted is used in case of multiple m=audio or m=video tags.
+            # Ports Adjusted is used in case of multiple m tags.
             if len(audio) > 0:
                 audioPortsAdj = self.audioPorts / len(audio)
             else:
@@ -105,8 +103,10 @@ class VoIPCall:
 
             debug(f"{self.__class__.__name__}.{inspect.stack()[0][3]} ({audioPortsAdj} == {self.connections} "
                   f"or {self.audioPorts} == 0) and ({videoPortsAdj} == {self.connections} or {self.videoPorts} == 0)")
-            if not ((audioPortsAdj == self.connections or self.audioPorts == 0) and (
-                    videoPortsAdj == self.connections or self.videoPorts == 0)):
+            if not ((audioPortsAdj == self.connections or
+                    self.audioPorts == 0) and
+                    (videoPortsAdj == self.connections or
+                    self.videoPorts == 0)):
                 # TODO: Throw error to PBX in this case
                 warnings.warn("Unable to assign ports for RTP.", stacklevel=2)
                 return
@@ -120,7 +120,8 @@ class VoIPCall:
                         assoc[int(x)] = p
                     except ValueError:
                         try:
-                            p = RTP.PayloadType(i['attributes'][x]['rtpmap']['name'])
+                            p = RTP.PayloadType(
+                                i['attributes'][x]['rtpmap']['name'])
                             assoc[int(x)] = p
                         except ValueError:
                             # sometimes rtpmap raise a KeyError because fmtp is set instate
@@ -128,8 +129,8 @@ class VoIPCall:
                             warnings.warn(f"RTP Payload type {pt} not found.",
                                           stacklevel=20)
                             # Resets the warning filter so this warning will
-                            # come up again if it happens. However, this
-                            # also resets all other warnings as well.
+                            # come up again if it happens.  However, this
+                            # also resets all other warnings.
                             warnings.simplefilter("default")
                             p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
@@ -152,7 +153,7 @@ class VoIPCall:
                 # TODO: If no codecs are compatible then send error to PBX.
 
                 port = None
-                while port is None:
+                while port is Non
                     proposed = random.randint(self.phone.rtpPortLow,
                                               self.phone.rtpPortHigh)
                     if proposed not in self.phone.assignedPorts:
@@ -257,8 +258,8 @@ class VoIPCall:
                 except ValueError:
                     try:
                         p = RTP.PayloadType(
-                            i['attributes'][x]['rtpmap']['name']
-                        )
+                                i['attributes'][x]['rtpmap']['name']
+                            )
                         assoc[int(x)] = p
                     except ValueError:
                         e = True
@@ -322,7 +323,7 @@ class VoIPCall:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
-        message = self.sip.genBusy(self.request)
+        message = self.sip.gen_busy(self.request)
         self.sip.send_message(message)
         self.RTPClients = []
         self.state = CallState.ENDED
@@ -346,7 +347,7 @@ class VoIPCall:
             self.state = CallState.ENDED
         if self.request.headers['Call-ID'] in self.phone.calls:
             del self.phone.calls[self.request.headers['Call-ID']]
-
+            
     def write_audio(self, data: bytes) -> None:
         debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} start')
         for x in self.RTPClients:
@@ -544,9 +545,9 @@ class VoIPPhone:
                 port = proposed
         medias = {}
         medias[port] = {
-            0: RTP.PayloadType.PCMU,
-            101: RTP.PayloadType.EVENT
-        }
+                        0: RTP.PayloadType.PCMU,
+                        101: RTP.PayloadType.EVENT
+                       }
         request, call_id, sess_id = self.sip.invite(number, medias,
                                                     pyVoIP.RTP.TransmitType.SENDRECV)
         self.calls[call_id] = VoIPCall(self, CallState.DIALING, request,

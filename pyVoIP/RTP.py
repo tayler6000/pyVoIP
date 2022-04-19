@@ -12,6 +12,7 @@ import netaddr
 import threading
 import time
 
+
 __all__ = [
     'add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType',
     'RTPParseError', 'RTPProtocol', 'RTPPacketManager', 'RTPClient',
@@ -50,6 +51,7 @@ class RTPProtocol(Enum):
     AVP = 'RTP/AVP'
     SAVP = 'RTP/SAVP'
     AVPF = 'RTP/AVPF'
+
 
 
 class TransmitType(Enum):
@@ -97,7 +99,8 @@ class PayloadType(Enum):
     def description(self, value: str) -> None:
         self._description = value
 
-    def __int__(self):
+
+    def __int__(self) -> int:
         try:
             return int(self.value)
         except ValueError:
@@ -158,6 +161,7 @@ class RTPPacketManager:
         self.rebuilding = False
 
     def read(self, length: int = 160) -> bytes:
+
         # Attention: many calls
         # debug(f'{self.__class__.__name__}.{inspect.stack()[0][3]} called from '
         #      f'{inspect.stack()[1][0].f_locals["self"].__class__.__name__}.{inspect.stack()[1][3]} start')
@@ -406,7 +410,6 @@ class RTPClient:
                 self.outTimestamp = 0
             packet += self.outSSRC.to_bytes(4, byteorder='big')
             packet += payload
-
             try:
                 self.sout.sendto(packet, (self.outIP, self.outPort))
             except OSError:
