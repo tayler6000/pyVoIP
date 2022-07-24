@@ -861,7 +861,8 @@ class SIPClient():
     self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
     
     response = SIPMessage(self.s.recv(8192))
-    
+    response = self.tryingTimeoutCheck(response)
+
     
     while response.status != SIPStatus(401):
       if response.status == SIPStatus(500):
@@ -877,6 +878,8 @@ class SIPClient():
     self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
     
     response = SIPMessage(self.s.recv(8192))
+    response = self.tryingTimeoutCheck(response)
+
     if response.status==SIPStatus.OK:
       return True
     self.recvLock.release()
@@ -890,8 +893,12 @@ class SIPClient():
     
     self.out.sendto(regRequest.encode('utf8'), (self.server, self.port))
     
+    
     response = SIPMessage(self.s.recv(8192))
+    response = self.tryingTimeoutCheck(response)
+    
 
+    
     if response.status != SIPStatus(401):
       if response.status == SIPStatus(500):
         self.recvLock.release()
@@ -909,6 +916,9 @@ class SIPClient():
     
     response = SIPMessage(self.s.recv(8192))
     self.recvLock.release()
+
+    response = self.tryingTimeoutCheck(response)
+
     if response.status == SIPStatus.OK:
       if self.NSD:
         self.registerThread = Timer(295, self.register)
@@ -917,6 +927,18 @@ class SIPClient():
       return True
     else:
       raise InvalidAccountInfoError("Invalid Username or Password for SIP server "+self.server+':'+str(self.myPort))
-    
-    
+    return True
 
+  def tryingTimeoutCheck(self, response):
+    # Some servers need time to process the response. 
+    # when this happens, the first response you get from the server is
+    # SIPStatus.TRYING. This while loop tries checks every second for an updated
+    # response. It times out after 30 seconds.  
+    waitTime = 0
+    while response.status == SIPStatus.TRYING:
+      time.sleep(1)
+      waitTime += 1
+      response = SIPMessage(self.s.recv(8192))
+      if waitTime >= 30:
+        raise ResponseTimeoutError("Timeout error for response, waited 30 seconds but SIPStatus is still TRYING")
+    return response
