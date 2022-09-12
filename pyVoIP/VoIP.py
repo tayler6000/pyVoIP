@@ -740,8 +740,7 @@ class VoIPPhone:
                         ports.append(port)
 
             for port in ports:
-                index = self.assignedPorts.index(port)
-                self.assignedPorts.pop(index)
+                self.assignedPorts.remove(port)
         finally:
             self.portsLock.release()
 
@@ -750,8 +749,16 @@ class VoIPPhone:
         for thread in self.threads:
             if not thread.is_alive():
                 call_id = self.threadLookup[thread]
-                del self.calls[call_id]
-                del self.threadLookup[thread]
+                try:
+                    del self.calls[call_id]
+                except KeyError:
+                    debug("Unable to delete from calls dictionary!")
+                    debug(f"{call_id=} {self.calls=}")
+                try:
+                    del self.threadLookup[thread]
+                except KeyError:
+                    debug("Unable to delete from threadLookup dictionary!")
+                    debug(f"{thread=} {self.threadLookup=}")
                 to_delete.append(thread)
         for thread in to_delete:
             self.threads.remove(thread)
