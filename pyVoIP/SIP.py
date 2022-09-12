@@ -341,6 +341,7 @@ class SIPMessage:
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
         self.raw = data
+        self.auth_match = re.compile(",?[a-zA-Z0-9]*=")
         self.parse(data)
 
     def summary(self) -> str:
@@ -450,14 +451,17 @@ class SIPMessage:
         elif header == "Content-Length":
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
-            data = data.replace("Digest", "")
-            #  fix issue 41 part 2
-            #  add blank to avoid the split of qop="auth,auth-int"
-            info = data.split(", ")
+            data = data.replace("Digest ", "")
+            vars = [
+                x.lstrip(",").rstrip("=")
+                for x in self.auth_match.findall(data)
+            ]
+            data = self.auth_match.split(data)
+            data.pop(0)
+            data = [x.strip('"') for x in data]
             header_data = {}
-            for x in info:
-                x = x.strip()
-                header_data[x.split("=")[0]] = x.split("=")[1].strip('"')
+            for var, data in zip(vars, data):
+                header_data[var] = data
             self.headers[header] = header_data
             self.authentication = header_data
         else:
