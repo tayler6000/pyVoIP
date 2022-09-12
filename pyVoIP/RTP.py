@@ -12,9 +12,15 @@ import warnings
 
 
 __all__ = [
-    'add_bytes', 'byte_to_bits', 'DynamicPayloadType', 'PayloadType',
-    'RTPParseError', 'RTPProtocol', 'RTPPacketManager', 'RTPClient',
-    'TransmitType'
+    "add_bytes",
+    "byte_to_bits",
+    "DynamicPayloadType",
+    "PayloadType",
+    "RTPParseError",
+    "RTPProtocol",
+    "RTPPacketManager",
+    "RTPClient",
+    "TransmitType",
 ]
 
 
@@ -22,7 +28,7 @@ debug = pyVoIP.debug
 
 
 def byte_to_bits(byte: bytes) -> str:
-    nbyte = bin(ord(byte)).lstrip('-0b')
+    nbyte = bin(ord(byte)).lstrip("-0b")
     nbyte = ("0" * (8 - len(nbyte))) + nbyte
     return nbyte
 
@@ -30,7 +36,7 @@ def byte_to_bits(byte: bytes) -> str:
 def add_bytes(byte_string: bytes) -> int:
     binary = ""
     for byte in byte_string:
-        nbyte = bin(byte).lstrip('-0b')
+        nbyte = bin(byte).lstrip("-0b")
         nbyte = ("0" * (8 - len(nbyte))) + nbyte
         binary += nbyte
     return int(binary, 2)
@@ -45,25 +51,29 @@ class RTPParseError(Exception):
 
 
 class RTPProtocol(Enum):
-    UDP = 'udp'
-    AVP = 'RTP/AVP'
-    SAVP = 'RTP/SAVP'
+    UDP = "udp"
+    AVP = "RTP/AVP"
+    SAVP = "RTP/SAVP"
 
 
 class TransmitType(Enum):
-    RECVONLY = 'recvonly'
-    SENDRECV = 'sendrecv'
-    SENDONLY = 'sendonly'
-    INACTIVE = 'inactive'
+    RECVONLY = "recvonly"
+    SENDRECV = "sendrecv"
+    SENDONLY = "sendonly"
+    INACTIVE = "inactive"
 
     def __str__(self):
         return self.value
 
 
 class PayloadType(Enum):
-
-    def __new__(cls, value: Union[int, str], clock: int = 0,
-                channel: int = 0, description: str = ""):
+    def __new__(
+        cls,
+        value: Union[int, str],
+        clock: int = 0,
+        channel: int = 0,
+        description: str = "",
+    ):
         obj = object.__new__(cls)
         obj._value_ = value
         obj.rate = clock
@@ -100,8 +110,9 @@ class PayloadType(Enum):
             return int(self.value)
         except ValueError:
             pass
-        raise DynamicPayloadType(self.description +
-                                 " is a dynamically assigned payload")
+        raise DynamicPayloadType(
+            self.description + " is a dynamically assigned payload"
+        )
 
     def __str__(self) -> str:
         if isinstance(self.value, int):
@@ -143,7 +154,7 @@ class PayloadType(Enum):
     UNKNOWN = "UNKNOWN", 0, 0, "UNKNOWN CODEC"
 
 
-class RTPPacketManager():
+class RTPPacketManager:
     def __init__(self):
         self.offset = 4294967296
         """
@@ -162,11 +173,11 @@ class RTPPacketManager():
         self.bufferLock.acquire()
         packet = self.buffer.read(length)
         if len(packet) < length:
-            packet = packet + (b'\x80' * (length - len(packet)))
+            packet = packet + (b"\x80" * (length - len(packet)))
         self.bufferLock.release()
         return packet
 
-    def rebuild(self, reset: bool, offset: int = 0, data: bytes = b'') -> None:
+    def rebuild(self, reset: bool, offset: int = 0, data: bytes = b"") -> None:
         self.rebuilding = True
         if reset:
             self.log = {}
@@ -189,7 +200,7 @@ class RTPPacketManager():
             If the new timestamp is over 100,000 bytes before the
             earliest, erase the buffer.  This will stop memory errors.
             """
-            reset = (abs(offset - self.offset) >= 100000)
+            reset = abs(offset - self.offset) >= 100000
             self.offset = offset
             self.bufferLock.release()
             """
@@ -205,7 +216,7 @@ class RTPPacketManager():
         self.bufferLock.release()
 
 
-class RTPMessage():
+class RTPMessage:
     def __init__(self, data: bytes, assoc: Dict[int, PayloadType]):
         self.RTPCompatibleVersions = pyVoIP.RTPCompatibleVersions
         self.assoc = assoc
@@ -229,8 +240,10 @@ class RTPMessage():
         data += f"Extension: {self.extension}\n"
         data += f"CC: {self.CC}\n"
         data += f"Marker: {self.marker}\n"
-        data += f"Payload Type: {self.payload_type} " + \
-                f"({self.payload_type.value})\n"
+        data += (
+            f"Payload Type: {self.payload_type} "
+            + f"({self.payload_type.value})\n"
+        )
         data += f"Sequence Number: {self.sequence}\n"
         data += f"Timestamp: {self.timestamp}\n"
         data += f"SSRC: {self.SSRC}\n"
@@ -268,7 +281,7 @@ class RTPMessage():
 
         i = 12
         for x in range(self.CC):
-            self.CSRC.append(packet[i:i + 4])
+            self.CSRC.append(packet[i : i + 4])
             i += 4
 
         if self.extension:
@@ -277,10 +290,17 @@ class RTPMessage():
         self.payload = packet[i:]
 
 
-class RTPClient():
-    def __init__(self, assoc: Dict[int, PayloadType], inIP: str, inPort: int,
-                 outIP: str, outPort: int, sendrecv: TransmitType,
-                 dtmf: Optional[Callable[[str], None]] = None):
+class RTPClient:
+    def __init__(
+        self,
+        assoc: Dict[int, PayloadType],
+        inIP: str,
+        inPort: int,
+        outIP: str,
+        outPort: int,
+        sendrecv: TransmitType,
+        dtmf: Optional[Callable[[str], None]] = None,
+    ):
         self.NSD = True
         # Example: {0: PayloadType.PCMU, 101: PayloadType.EVENT}
         self.assoc = assoc
@@ -336,7 +356,7 @@ class RTPClient():
         if not blocking:
             return self.pmin.read(length)
         packet = self.pmin.read(length)
-        while packet == (b'\x80' * length) and self.NSD:
+        while packet == (b"\x80" * length) and self.NSD:
             time.sleep(0.01)
             packet = self.pmin.read(length)
         return packet
@@ -362,16 +382,16 @@ class RTPClient():
             payload = self.pmout.read()
             payload = self.encodePacket(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
-            packet += chr(int(self.preference)).encode('utf8')
+            packet += chr(int(self.preference)).encode("utf8")
             try:
-                packet += self.outSequence.to_bytes(2, byteorder='big')
+                packet += self.outSequence.to_bytes(2, byteorder="big")
             except OverflowError:
                 self.outSequence = 0
             try:
-                packet += self.outTimestamp.to_bytes(4, byteorder='big')
+                packet += self.outTimestamp.to_bytes(4, byteorder="big")
             except OverflowError:
                 self.outTimestamp = 0
-            packet += self.outSSRC.to_bytes(4, byteorder='big')
+            packet += self.outSSRC.to_bytes(4, byteorder="big")
             packet += payload
 
             # debug(payload)
@@ -386,9 +406,12 @@ class RTPClient():
             time.sleep((1 / self.preference.rate) * 160)  # 1 / 8000 * 160
 
     def parsePacket(self, packet: bytes) -> None:
-        warnings.warn("parsePacket is deprecated due to PEP8 compliance. " +
-                      "Use parse_packet instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "parsePacket is deprecated due to PEP8 compliance. "
+            + "Use parse_packet instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.parse_packet(packet)
 
     def parse_packet(self, packet: bytes) -> None:
@@ -400,13 +423,17 @@ class RTPClient():
         elif msg.payload_type == PayloadType.EVENT:
             self.parseTelephoneEvent(msg)
         else:
-            raise RTPParseError("Unsupported codec (parse): " +
-                                str(msg.payload_type))
+            raise RTPParseError(
+                "Unsupported codec (parse): " + str(msg.payload_type)
+            )
 
     def encodePacket(self, payload: bytes) -> bytes:
-        warnings.warn("encodePacket is deprecated due to PEP8 compliance. " +
-                      "Use encode_packet instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "encodePacket is deprecated due to PEP8 compliance. "
+            + "Use encode_packet instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.encode_packet(payload)
 
     def encode_packet(self, payload: bytes) -> bytes:
@@ -415,13 +442,17 @@ class RTPClient():
         elif self.preference == PayloadType.PCMA:
             return self.encodePCMA(payload)
         else:
-            raise RTPParseError("Unsupported codec (encode): " +
-                                str(self.preference))
+            raise RTPParseError(
+                "Unsupported codec (encode): " + str(self.preference)
+            )
 
     def parsePCMU(self, packet: RTPMessage) -> None:
-        warnings.warn("parsePCMU is deprecated due to PEP8 compliance. " +
-                      "Use parse_pcmu instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "parsePCMU is deprecated due to PEP8 compliance. "
+            + "Use parse_pcmu instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.parse_pcmu(packet)
 
     def parse_pcmu(self, packet: RTPMessage) -> None:
@@ -430,9 +461,12 @@ class RTPClient():
         self.pmin.write(packet.timestamp, data)
 
     def encodePCMU(self, packet: bytes) -> bytes:
-        warnings.warn("encodePCMU is deprecated due to PEP8 compliance. " +
-                      "Use encode_pcmu instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "encodePCMU is deprecated due to PEP8 compliance. "
+            + "Use encode_pcmu instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.encode_pcmu(packet)
 
     def encode_pcmu(self, packet: bytes) -> bytes:
@@ -441,9 +475,12 @@ class RTPClient():
         return packet
 
     def parsePCMA(self, packet: RTPMessage) -> None:
-        warnings.warn("parsePCMA is deprecated due to PEP8 compliance. " +
-                      "Use parse_pcma instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "parsePCMA is deprecated due to PEP8 compliance. "
+            + "Use parse_pcma instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.parse_pcma(packet)
 
     def parse_pcma(self, packet: RTPMessage) -> None:
@@ -452,9 +489,12 @@ class RTPClient():
         self.pmin.write(packet.timestamp, data)
 
     def encodePCMA(self, packet: bytes) -> bytes:
-        warnings.warn("encodePCMA is deprecated due to PEP8 compliance. " +
-                      "Use encode_pcma instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "encodePCMA is deprecated due to PEP8 compliance. "
+            + "Use encode_pcma instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.encode_pcma(packet)
 
     def encode_pcma(self, packet: bytes) -> bytes:
@@ -463,19 +503,34 @@ class RTPClient():
         return packet
 
     def parseTelephoneEvent(self, packet: RTPMessage) -> None:
-        warnings.warn("parseTelephoneEvent " +
-                      "is deprecated due to PEP8 compliance. " +
-                      "Use parse_telephone_event instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "parseTelephoneEvent "
+            + "is deprecated due to PEP8 compliance. "
+            + "Use parse_telephone_event instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.parse_telephone_event(packet)
 
     def parse_telephone_event(self, packet: RTPMessage) -> None:
         key = [
-                '0', '1', '2', '3',
-                '4', '5', '6', '7',
-                '8', '9', '*', '#',
-                'A', 'B', 'C', 'D'
-              ]
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "*",
+            "#",
+            "A",
+            "B",
+            "C",
+            "D",
+        ]
 
         payload = packet.payload
         event = key[payload[0]]

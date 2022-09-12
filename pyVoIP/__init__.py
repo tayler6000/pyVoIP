@@ -1,4 +1,4 @@
-__all__ = ['SIP', 'RTP', 'VoIP']
+__all__ = ["SIP", "RTP", "VoIP"]
 
 version_info = (1, 6, 0)
 
@@ -17,8 +17,8 @@ def debug(s, e=None):
 # noqa because import will fail if debug is not defined
 from pyVoIP.RTP import PayloadType  # noqa: E402
 
-SIPCompatibleMethods = ['INVITE', 'ACK', 'BYE', 'CANCEL']
-SIPCompatibleVersions = ['SIP/2.0']
+SIPCompatibleMethods = ["INVITE", "ACK", "BYE", "CANCEL"]
+SIPCompatibleVersions = ["SIP/2.0"]
 
 RTPCompatibleVersions = [2]
 RTPCompatibleCodecs = [PayloadType.PCMU, PayloadType.PCMA, PayloadType.EVENT]

@@ -11,9 +11,13 @@ import warnings
 
 
 __all__ = [
-            'CallState', 'InvalidRangeError', 'InvalidStateError', 'NoPortsAvailableError',
-            'VoIPCall', 'VoIPPhone'
-          ]
+    "CallState",
+    "InvalidRangeError",
+    "InvalidStateError",
+    "NoPortsAvailableError",
+    "VoIPCall",
+    "VoIPPhone",
+]
 
 debug = pyVoIP.debug
 
@@ -45,17 +49,22 @@ class PhoneStatus(Enum):
     FAILED = "FAILED"
 
 
-class VoIPCall():
-
-    def __init__(self, phone: "VoIPPhone", callstate: CallState,
-                 request: SIP.SIPMessage, session_id: int, myIP: str,
-                 ms: Optional[Dict[int, RTP.PayloadType]] = None,
-                 sendmode="sendonly"):
+class VoIPCall:
+    def __init__(
+        self,
+        phone: "VoIPPhone",
+        callstate: CallState,
+        request: SIP.SIPMessage,
+        session_id: int,
+        myIP: str,
+        ms: Optional[Dict[int, RTP.PayloadType]] = None,
+        sendmode="sendonly",
+    ):
         self.state = callstate
         self.phone = phone
         self.sip = self.phone.sip
         self.request = request
-        self.call_id = request.headers['Call-ID']
+        self.call_id = request.headers["Call-ID"]
         self.session_id = str(session_id)
         self.myIP = myIP
         self.rtpPortHigh = self.phone.rtpPortHigh
@@ -80,18 +89,19 @@ class VoIPCall():
         if callstate == CallState.RINGING:
             audio = []
             video = []
-            for x in self.request.body['c']:
-                self.connections += x['address_count']
-            for x in self.request.body['m']:
-                if x['type'] == "audio":
-                    self.audioPorts += x['port_count']
+            for x in self.request.body["c"]:
+                self.connections += x["address_count"]
+            for x in self.request.body["m"]:
+                if x["type"] == "audio":
+                    self.audioPorts += x["port_count"]
                     audio.append(x)
-                elif x['type'] == "video":
-                    self.videoPorts += x['port_count']
+                elif x["type"] == "video":
+                    self.videoPorts += x["port_count"]
                     video.append(x)
                 else:
-                    warnings.warn(f"Unknown media description: {x['type']}",
-                                  stacklevel=2)
+                    warnings.warn(
+                        f"Unknown media description: {x['type']}", stacklevel=2
+                    )
 
             # Ports Adjusted is used in case of multiple m tags.
             if len(audio) > 0:
@@ -103,31 +113,34 @@ class VoIPCall():
             else:
                 videoPortsAdj = 0
 
-            if not ((audioPortsAdj == self.connections or
-                    self.audioPorts == 0) and
-                    (videoPortsAdj == self.connections or
-                    self.videoPorts == 0)):
+            if not (
+                (audioPortsAdj == self.connections or self.audioPorts == 0)
+                and (videoPortsAdj == self.connections or self.videoPorts == 0)
+            ):
                 # TODO: Throw error to PBX in this case
                 warnings.warn("Unable to assign ports for RTP.", stacklevel=2)
                 return
 
-            for i in request.body['m']:
+            for i in request.body["m"]:
                 assoc = {}
                 e = False
-                for x in i['methods']:
+                for x in i["methods"]:
                     try:
                         p = RTP.PayloadType(int(x))
                         assoc[int(x)] = p
                     except ValueError:
                         try:
                             p = RTP.PayloadType(
-                                i['attributes'][x]['rtpmap']['name'])
+                                i["attributes"][x]["rtpmap"]["name"]
+                            )
                             assoc[int(x)] = p
                         except ValueError:
                             # sometimes rtpmap raise a KeyError because fmtp is set instate
-                            pt = i['attributes'][x]['rtpmap']['name']
-                            warnings.warn(f"RTP Payload type {pt} not found.",
-                                          stacklevel=20)
+                            pt = i["attributes"][x]["rtpmap"]["name"]
+                            warnings.warn(
+                                f"RTP Payload type {pt} not found.",
+                                stacklevel=20,
+                            )
                             # Resets the warning filter so this warning will
                             # come up again if it happens.  However, this
                             # also resets all other warnings.
@@ -138,13 +151,16 @@ class VoIPCall():
                             # fix issue 42
                             # When rtpmap is not found, also set the found
                             # element to UNKNOWN
-                            warnings.warn(f"RTP KeyError {x} not found.", stacklevel=20)
+                            warnings.warn(
+                                f"RTP KeyError {x} not found.", stacklevel=20
+                            )
                             p = RTP.PayloadType("UNKNOWN")
                             assoc[int(x)] = p
 
                 if e:
-                    raise RTP.RTPParseError(f"RTP Payload type {pt} not " +
-                                            "found.")
+                    raise RTP.RTPParseError(
+                        f"RTP Payload type {pt} not found."
+                    )
 
                 # Make sure codecs are compatible.
                 codecs = {}
@@ -154,43 +170,68 @@ class VoIPCall():
                 # TODO: If no codecs are compatible then send error to PBX.
 
                 port = self.phone.request_port()
-                self.createRTPClients(codecs, self.myIP, port, request,
-                                      i['port'])
+                self.createRTPClients(
+                    codecs, self.myIP, port, request, i["port"]
+                )
         elif callstate == CallState.DIALING:
             if ms is None:
-                raise RuntimeError("Media assignments are required when " +
-                                   "initiating a call")
+                raise RuntimeError(
+                    "Media assignments are required when "
+                    + "initiating a call"
+                )
             self.ms = ms
             for m in self.ms:
                 self.port = m
                 self.assignedPorts[m] = self.ms[m]
 
-    def createRTPClients(self, codecs: Dict[int, RTP.PayloadType], ip: str,
-                         port: int, request: SIP.SIPMessage,
-                         baseport: int) -> None:
-        warnings.warn("createRTPClients is deprecated due to PEP8 " +
-                      "compliance. Use create_rtp_clients instead.",
-                      DeprecationWarning, stacklevel=2)
+    def createRTPClients(
+        self,
+        codecs: Dict[int, RTP.PayloadType],
+        ip: str,
+        port: int,
+        request: SIP.SIPMessage,
+        baseport: int,
+    ) -> None:
+        warnings.warn(
+            "createRTPClients is deprecated due to PEP8 "
+            + "compliance. Use create_rtp_clients instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.create_rtp_clients(codecs, ip, port, request, baseport)
 
-    def create_rtp_clients(self, codecs: Dict[int, RTP.PayloadType], ip: str,
-                           port: int, request: SIP.SIPMessage,
-                           baseport: int) -> None:
-        for ii in range(len(request.body['c'])):
+    def create_rtp_clients(
+        self,
+        codecs: Dict[int, RTP.PayloadType],
+        ip: str,
+        port: int,
+        request: SIP.SIPMessage,
+        baseport: int,
+    ) -> None:
+        for ii in range(len(request.body["c"])):
             # TODO: Check IPv4/IPv6
-            c = RTP.RTPClient(codecs, ip, port,
-                              request.body['c'][ii]['address'], baseport + ii,
-                              self.sendmode, dtmf=self.dtmfCallback)
+            c = RTP.RTPClient(
+                codecs,
+                ip,
+                port,
+                request.body["c"][ii]["address"],
+                baseport + ii,
+                self.sendmode,
+                dtmf=self.dtmfCallback,
+            )
             self.RTPClients.append(c)
 
     def dtmfCallback(self, code: str) -> None:
-        warnings.warn("dtmfCallback is deprecated due to PEP8 compliance. " +
-                      "Use dtmf_callback instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "dtmfCallback is deprecated due to PEP8 compliance. "
+            + "Use dtmf_callback instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.dtmf_callback(code)
 
     def __del__(self):
-        if hasattr(self, 'phone'):
+        if hasattr(self, "phone"):
             self.phone.release_ports(call=self)
 
     def dtmf_callback(self, code: str) -> None:
@@ -202,9 +243,12 @@ class VoIPCall():
         self.dtmfLock.release()
 
     def getDTMF(self, length=1) -> str:
-        warnings.warn("getDTMF is deprecated due to PEP8 compliance. " +
-                      "Use get_dtmf instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "getDTMF is deprecated due to PEP8 compliance. "
+            + "Use get_dtmf instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.get_dtmf(length)
 
     def get_dtmf(self, length=1) -> str:
@@ -214,8 +258,12 @@ class VoIPCall():
         return packet
 
     def genMs(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
-        warnings.warn("genMs is deprecated due to PEP8 compliance. " +
-                      "Use gen_ms instead.", DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "genMs is deprecated due to PEP8 compliance. "
+            + "Use gen_ms instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.gen_ms()
 
     def gen_ms(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
@@ -234,42 +282,47 @@ class VoIPCall():
 
     def renegotiate(self, request: SIP.SIPMessage) -> None:
         m = self.genMs()
-        message = self.sip.genAnswer(request, self.session_id, m,
-                                     self.sendmode)
-        self.sip.out.sendto(message.encode('utf8'),
-                            (self.phone.server, self.phone.port))
-        for i in request.body['m']:
-            for ii, client in zip(range(len(request.body['c'])),
-                                  self.RTPClients):
-                client.outIP = request.body['c'][ii]['address']
-                client.outPort = i['port'] + ii  # TODO: Check IPv4/IPv6
+        message = self.sip.genAnswer(
+            request, self.session_id, m, self.sendmode
+        )
+        self.sip.out.sendto(
+            message.encode("utf8"), (self.phone.server, self.phone.port)
+        )
+        for i in request.body["m"]:
+            for ii, client in zip(
+                range(len(request.body["c"])), self.RTPClients
+            ):
+                client.outIP = request.body["c"][ii]["address"]
+                client.outPort = i["port"] + ii  # TODO: Check IPv4/IPv6
 
     def answer(self) -> None:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         m = self.genMs()
-        message = self.sip.genAnswer(self.request, self.session_id, m,
-                                     self.sendmode)
-        self.sip.out.sendto(message.encode('utf8'),
-                            (self.phone.server, self.phone.port))
+        message = self.sip.genAnswer(
+            self.request, self.session_id, m, self.sendmode
+        )
+        self.sip.out.sendto(
+            message.encode("utf8"), (self.phone.server, self.phone.port)
+        )
         self.state = CallState.ANSWERED
 
     def answered(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
             return
 
-        for i in request.body['m']:
+        for i in request.body["m"]:
             assoc = {}
             e = False
-            for x in i['methods']:
+            for x in i["methods"]:
                 try:
                     p = RTP.PayloadType(int(x))
                     assoc[int(x)] = p
                 except ValueError:
                     try:
                         p = RTP.PayloadType(
-                                i['attributes'][x]['rtpmap']['name']
-                            )
+                            i["attributes"][x]["rtpmap"]["name"]
+                        )
                         assoc[int(x)] = p
                     except ValueError:
                         e = True
@@ -277,36 +330,45 @@ class VoIPCall():
             if e:
                 raise RTP.RTPParseError(f"RTP Payload type {p} not found.")
 
-            self.createRTPClients(assoc, self.myIP, self.port, request,
-                                  i['port'])
+            self.createRTPClients(
+                assoc, self.myIP, self.port, request, i["port"]
+            )
 
         for x in self.RTPClients:
             x.start()
-        self.request.headers['Contact'] = request.headers['Contact']
-        self.request.headers['To']['tag'] = request.headers['To']['tag']
+        self.request.headers["Contact"] = request.headers["Contact"]
+        self.request.headers["To"]["tag"] = request.headers["To"]["tag"]
         self.state = CallState.ANSWERED
 
     def notFound(self, request: SIP.SIPMessage) -> None:
-        warnings.warn("notFound is deprecated due to PEP8 compliance. " +
-                      "Use not_found instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "notFound is deprecated due to PEP8 compliance. "
+            + "Use not_found instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.not_found(request)
 
     def not_found(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
-            debug("TODO: 500 Error, received a not found response for a " +
-                  f"call not in the dailing state.  Call: {self.call_id}, " +
-                  f"Call State: {self.state}")
+            debug(
+                "TODO: 500 Error, received a not found response for a "
+                + f"call not in the dailing state.  Call: {self.call_id}, "
+                + f"Call State: {self.state}"
+            )
             return
 
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
-        del self.phone.calls[self.request.headers['Call-ID']]
+        del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call not found and terminated")
-        warnings.warn(f"The number '{request.headers['To']['number']}' " +
-                      "was not found.  Did you call the wrong number?  " +
-                      "CallState set to CallState.ENDED.", stacklevel=20)
+        warnings.warn(
+            f"The number '{request.headers['To']['number']}' "
+            + "was not found.  Did you call the wrong number?  "
+            + "CallState set to CallState.ENDED.",
+            stacklevel=20,
+        )
         # Resets the warning filter so this warning will
         # come up again if it happens.  However, this
         # also resets all other warnings.
@@ -314,19 +376,23 @@ class VoIPCall():
 
     def unavailable(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
-            debug("TODO: 500 Error, received an unavailable response for a " +
-                  f"call not in the dailing state.  Call: {self.call_id}, " +
-                  f"Call State: {self.state}")
+            debug(
+                "TODO: 500 Error, received an unavailable response for a "
+                + f"call not in the dailing state.  Call: {self.call_id}, "
+                + f"Call State: {self.state}"
+            )
             return
 
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
-        del self.phone.calls[self.request.headers['Call-ID']]
+        del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call unavailable and terminated")
-        warnings.warn(f"The number '{request.headers['To']['number']}' " +
-                      "was unavailable.  CallState set to CallState.ENDED.",
-                      stacklevel=20)
+        warnings.warn(
+            f"The number '{request.headers['To']['number']}' "
+            + "was unavailable.  CallState set to CallState.ENDED.",
+            stacklevel=20,
+        )
         # Resets the warning filter so this warning will
         # come up again if it happens.  However, this
         # also resets all other warnings.
@@ -336,12 +402,13 @@ class VoIPCall():
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         message = self.sip.genBusy(self.request)
-        self.sip.out.sendto(message.encode('utf8'),
-                            (self.phone.server, self.phone.port))
+        self.sip.out.sendto(
+            message.encode("utf8"), (self.phone.server, self.phone.port)
+        )
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
-        del self.phone.calls[self.request.headers['Call-ID']]
+        del self.phone.calls[self.request.headers["Call-ID"]]
 
     def hangup(self) -> None:
         if self.state != CallState.ANSWERED:
@@ -350,21 +417,24 @@ class VoIPCall():
             x.stop()
         self.sip.bye(self.request)
         self.state = CallState.ENDED
-        if self.request.headers['Call-ID'] in self.phone.calls:
-            del self.phone.calls[self.request.headers['Call-ID']]
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
 
     def bye(self) -> None:
         if self.state == CallState.ANSWERED:
             for x in self.RTPClients:
                 x.stop()
             self.state = CallState.ENDED
-        if self.request.headers['Call-ID'] in self.phone.calls:
-            del self.phone.calls[self.request.headers['Call-ID']]
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
 
     def writeAudio(self, data: bytes) -> None:
-        warnings.warn("writeAudio is deprecated due to PEP8 compliance. " +
-                      "Use write_audio instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "writeAudio is deprecated due to PEP8 compliance. "
+            + "Use write_audio instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.write_audio(data)
 
     def write_audio(self, data: bytes) -> None:
@@ -372,9 +442,12 @@ class VoIPCall():
             x.write(data)
 
     def readAudio(self, length=160, blocking=True) -> bytes:
-        warnings.warn("readAudio is deprecated due to PEP8 compliance. " +
-                      "Use read_audio instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "readAudio is deprecated due to PEP8 compliance. "
+            + "Use read_audio instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.read_audio(length, blocking)
 
     def read_audio(self, length=160, blocking=True) -> bytes:
@@ -390,12 +463,19 @@ class VoIPCall():
         return nd
 
 
-class VoIPPhone():
-
-    def __init__(self, server: str, port: int, username: str, password: str,
-                 myIP="0.0.0.0",
-                 callCallback: Optional[Callable[['VoIPCall'], None]] = None,
-                 sipPort=5060, rtpPortLow=10000, rtpPortHigh=20000):
+class VoIPPhone:
+    def __init__(
+        self,
+        server: str,
+        port: int,
+        username: str,
+        password: str,
+        myIP="0.0.0.0",
+        callCallback: Optional[Callable[["VoIPCall"], None]] = None,
+        sipPort=5060,
+        rtpPortLow=10000,
+        rtpPortHigh=20000,
+    ):
         if rtpPortLow > rtpPortHigh:
             raise InvalidRangeError("'rtpPortHigh' must be >= 'rtpPortLow'")
 
@@ -423,9 +503,15 @@ class VoIPPhone():
         self.threads: List[Timer] = []
         # Allows you to find call ID based off thread.
         self.threadLookup: Dict[Timer, str] = {}
-        self.sip = SIP.SIPClient(server, port, username, password,
-                                 myIP=self.myIP, myPort=sipPort,
-                                 callCallback=self.callback)
+        self.sip = SIP.SIPClient(
+            server,
+            port,
+            username,
+            password,
+            myIP=self.myIP,
+            myPort=sipPort,
+            callCallback=self.callback,
+        )
 
     def callback(self, request: SIP.SIPMessage) -> None:
         # debug("Callback: "+request.summary())
@@ -444,16 +530,19 @@ class VoIPPhone():
                 self._callback_RESP_Unavailable(request)
 
     def getStatus(self) -> PhoneStatus:
-        warnings.warn("getStatus is deprecated due to PEP8 compliance. " +
-                      "Use get_status instead.", DeprecationWarning,
-                      stacklevel=2)
+        warnings.warn(
+            "getStatus is deprecated due to PEP8 compliance. "
+            + "Use get_status instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.get_status()
 
     def get_status(self) -> PhoneStatus:
         return self._status
 
     def _callback_MSG_Invite(self, request: SIP.SIPMessage) -> None:
-        call_id = request.headers['Call-ID']
+        call_id = request.headers["Call-ID"]
         if call_id in self.calls:
             debug("Re-negotiation detected!")
             # TODO: this seems "dangerous" if for some reason sip server
@@ -468,8 +557,9 @@ class VoIPPhone():
             return  # Raise Error
         if self.callCallback is None:
             message = self.sip.genBusy(request)
-            self.sip.out.sendto(message.encode('utf8'),
-                                (self.server, self.port))
+            self.sip.out.sendto(
+                message.encode("utf8"), (self.server, self.port)
+            )
         else:
             debug("New call!")
             sess_id = None
@@ -479,8 +569,9 @@ class VoIPPhone():
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.genRinging(request)
-            self.sip.out.sendto(message.encode('utf8'),
-                                (self.server, self.port))
+            self.sip.out.sendto(
+                message.encode("utf8"), (self.server, self.port)
+            )
             self._create_Call(request, sess_id)
             try:
                 t = Timer(1, self.callCallback, [self.calls[call_id]])
@@ -490,20 +581,21 @@ class VoIPPhone():
                 self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.genBusy(request)
-                self.sip.out.sendto(message.encode('utf8'),
-                                    (self.server, self.port))
+                self.sip.out.sendto(
+                    message.encode("utf8"), (self.server, self.port)
+                )
                 raise
 
     def _callback_MSG_Bye(self, request: SIP.SIPMessage) -> None:
         debug("BYE recieved")
-        call_id = request.headers['Call-ID']
+        call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             return
         self.calls[call_id].bye()
 
     def _callback_RESP_OK(self, request: SIP.SIPMessage) -> None:
         debug("OK recieved")
-        call_id = request.headers['Call-ID']
+        call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unknown/No call")
             return
@@ -512,41 +604,50 @@ class VoIPPhone():
         self.calls[call_id].answered(request)
         debug("Answered")
         ack = self.sip.genAck(request)
-        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
 
     def _callback_RESP_NotFound(self, request: SIP.SIPMessage) -> None:
         debug("Not Found recieved, invalid number called?")
-        call_id = request.headers['Call-ID']
+        call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unknown/No call")
-            debug("TODO: Add 481 here as server is probably waiting for " +
-                  "an ACK")
+            debug(
+                "TODO: Add 481 here as server is probably waiting for "
+                + "an ACK"
+            )
         self.calls[call_id].notFound(request)
         debug("Terminating Call")
         ack = self.sip.genAck(request)
-        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
 
     def _callback_RESP_Unavailable(self, request: SIP.SIPMessage) -> None:
         debug("Service Unavailable recieved")
-        call_id = request.headers['Call-ID']
+        call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unkown call")
-            debug("TODO: Add 481 here as server is probably waiting for " +
-                  "an ACK")
+            debug(
+                "TODO: Add 481 here as server is probably waiting for "
+                + "an ACK"
+            )
         self.calls[call_id].unavailable(request)
         debug("Terminating Call")
         ack = self.sip.genAck(request)
-        self.sip.out.sendto(ack.encode('utf8'), (self.server, self.port))
+        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
 
     def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> None:
-        '''
+        """
         Create VoIP call object. Should be separated to enable better
         subclassing.
-        '''
-        call_id = request.headers['Call-ID']
-        self.calls[call_id] = VoIPCall(self, CallState.RINGING, request,
-                                       sess_id, self.myIP,
-                                       sendmode=self.recvmode)
+        """
+        call_id = request.headers["Call-ID"]
+        self.calls[call_id] = VoIPCall(
+            self,
+            CallState.RINGING,
+            request,
+            sess_id,
+            self.myIP,
+            sendmode=self.recvmode,
+        )
 
     def start(self) -> None:
         self._status = PhoneStatus.REGISTERING
@@ -573,37 +674,50 @@ class VoIPPhone():
     def call(self, number: str) -> VoIPCall:
         port = self.request_port()
         medias = {}
-        medias[port] = {
-                        0: RTP.PayloadType.PCMU,
-                        101: RTP.PayloadType.EVENT
-                       }
-        request, call_id, sess_id = self.sip.invite(number, medias,
-                                                    RTP.TransmitType.SENDRECV)
-        self.calls[call_id] = VoIPCall(self, CallState.DIALING, request,
-                                       sess_id, self.myIP, ms=medias,
-                                       sendmode=self.sendmode)
+        medias[port] = {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}
+        request, call_id, sess_id = self.sip.invite(
+            number, medias, RTP.TransmitType.SENDRECV
+        )
+        self.calls[call_id] = VoIPCall(
+            self,
+            CallState.DIALING,
+            request,
+            sess_id,
+            self.myIP,
+            ms=medias,
+            sendmode=self.sendmode,
+        )
 
         return self.calls[call_id]
 
     def request_port(self, blocking=True) -> int:
-        ports_available = [port for port in range(self.rtpPortLow,
-                           self.rtpPortHigh + 1) if port not in self.assignedPorts]
+        ports_available = [
+            port
+            for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+            if port not in self.assignedPorts
+        ]
         if len(ports_available) == 0:
             # If no ports are available attempt to cleanup any missed calls.
             self.release_ports()
-            ports_available = [port for port in range(self.rtpPortLow,
-                               self.rtpPortHigh + 1) if (port not in
-                                                         self.assignedPorts)]
+            ports_available = [
+                port
+                for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+                if (port not in self.assignedPorts)
+            ]
 
         while self.NSD and blocking and len(ports_available) == 0:
-            ports_available = [port for port in range(self.rtpPortLow,
-                               self.rtpPortHigh + 1) if (port not in
-                                                         self.assignedPorts)]
-            time.sleep(.5)
+            ports_available = [
+                port
+                for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+                if (port not in self.assignedPorts)
+            ]
+            time.sleep(0.5)
             self.release_ports()
 
             if len(ports_available) == 0:
-                raise NoPortsAvailableError("No ports were available to be assigned")
+                raise NoPortsAvailableError(
+                    "No ports were available to be assigned"
+                )
 
         selection = random.choice(ports_available)
         self.assignedPorts.append(selection)
