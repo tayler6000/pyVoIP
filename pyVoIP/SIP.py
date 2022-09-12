@@ -934,11 +934,15 @@ class SIPClient():
     # when this happens, the first response you get from the server is
     # SIPStatus.TRYING. This while loop tries checks every second for an updated
     # response. It times out after 30 seconds.  
-    waitTime = 0
+    start_time = time.monotonic()
+    old_timeout = self.s.gettimeout()
     while response.status == SIPStatus.TRYING:
-      time.sleep(1)
-      waitTime += 1
-      response = SIPMessage(self.s.recv(8192))
-      if waitTime >= 30:
+      self.s.settimeout(1)
+      try:
+        response = SIPMessage(self.s.recv(8192))
+      except TimeoutError:
+        pass
+      self.s.settimeout(old_timeout)
+      if (time.monotonic() - start_time) >= 30:
         raise ResponseTimeoutError("Timeout error for response, waited 30 seconds but SIPStatus is still TRYING")
     return response

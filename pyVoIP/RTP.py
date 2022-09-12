@@ -217,7 +217,7 @@ class RTPClient():
           debug(f"Selected {assoc[m]}")
           self.preference = assoc[m] #Select the first available actual codec to encode with.  TODO: will need to change if video codecs are ever implemented.
           break
-      except:
+      except Exception:
         debug(f"{assoc[m]} cannot be selected as an audio codec")
     
     self.inIP = inIP
