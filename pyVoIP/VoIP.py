@@ -6,12 +6,13 @@ import audioop
 import io
 import pyVoIP
 import random
+import time
 import warnings
 
 
 __all__ = [
-            'CallState', 'InvalidRangeError', 'InvalidStateError', 'VoIPCall',
-            'VoIPPhone'
+            'CallState', 'InvalidRangeError', 'InvalidStateError', 'NoPortsAvailableError',
+            'VoIPCall', 'VoIPPhone'
           ]
 
 debug = pyVoIP.debug
@@ -22,6 +23,10 @@ class InvalidRangeError(Exception):
 
 
 class InvalidStateError(Exception):
+    pass
+
+
+class NoPortsAvailableError(Exception):
     pass
 
 
@@ -44,7 +49,6 @@ class VoIPCall():
 
     def __init__(self, phone: "VoIPPhone", callstate: CallState,
                  request: SIP.SIPMessage, session_id: int, myIP: str,
-                 portRange=(10000, 20000),
                  ms: Optional[Dict[int, RTP.PayloadType]] = None,
                  sendmode="sendonly"):
         self.state = callstate
@@ -54,8 +58,8 @@ class VoIPCall():
         self.call_id = request.headers['Call-ID']
         self.session_id = str(session_id)
         self.myIP = myIP
-        self.rtpPortHigh = portRange[1]
-        self.rtpPortLow = portRange[0]
+        self.rtpPortHigh = self.phone.rtpPortHigh
+        self.rtpPortLow = self.phone.rtpPortLow
         self.sendmode = sendmode
 
         self.dtmfLock = Lock()
@@ -149,14 +153,7 @@ class VoIPCall():
                         codecs[m] = assoc[m]
                 # TODO: If no codecs are compatible then send error to PBX.
 
-                port = None
-                while port is None:
-                    proposed = random.randint(self.rtpPortLow,
-                                              self.rtpPortHigh)
-                    if proposed not in self.phone.assignedPorts:
-                        self.phone.assignedPorts.append(proposed)
-                        self.assignedPorts[proposed] = codecs
-                        port = proposed
+                port = self.phone.request_port()
                 self.createRTPClients(codecs, self.myIP, port, request,
                                       i['port'])
         elif callstate == CallState.DIALING:
@@ -191,6 +188,10 @@ class VoIPCall():
                       "Use dtmf_callback instead.", DeprecationWarning,
                       stacklevel=2)
         return self.dtmf_callback(code)
+
+    def __del__(self):
+        if hasattr(self, 'phone'):
+            self.phone.release_ports(call=self)
 
     def dtmf_callback(self, code: str) -> None:
         self.dtmfLock.acquire()
@@ -337,8 +338,10 @@ class VoIPCall():
         message = self.sip.genBusy(self.request)
         self.sip.out.sendto(message.encode('utf8'),
                             (self.phone.server, self.phone.port))
-        self.RTPClients = []
+        for x in self.RTPClients:
+            x.stop()
         self.state = CallState.ENDED
+        del self.phone.calls[self.request.headers['Call-ID']]
 
     def hangup(self) -> None:
         if self.state != CallState.ANSWERED:
@@ -398,7 +401,9 @@ class VoIPPhone():
 
         self.rtpPortLow = rtpPortLow
         self.rtpPortHigh = rtpPortHigh
+        self.NSD = False
 
+        self.portsLock = Lock()
         self.assignedPorts: List[int] = []
         self.session_ids: List[int] = []
 
@@ -415,6 +420,9 @@ class VoIPPhone():
         self.recvmode = "sendrecv"
 
         self.calls: Dict[str, VoIPCall] = {}
+        self.threads: List[Timer] = []
+        # Allows you to find call ID based off thread.
+        self.threadLookup: Dict[Timer, str] = {}
         self.sip = SIP.SIPClient(server, port, username, password,
                                  myIP=self.myIP, myPort=sipPort,
                                  callCallback=self.callback)
@@ -478,6 +486,8 @@ class VoIPPhone():
                 t = Timer(1, self.callCallback, [self.calls[call_id]])
                 t.name = f"Phone Call: {call_id}"
                 t.start()
+                self.threads.append(t)
+                self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.genBusy(request)
                 self.sip.out.sendto(message.encode('utf8'),
@@ -536,8 +546,6 @@ class VoIPPhone():
         call_id = request.headers['Call-ID']
         self.calls[call_id] = VoIPCall(self, CallState.RINGING, request,
                                        sess_id, self.myIP,
-                                       portRange=(self.rtpPortLow,
-                                                  self.rtpPortHigh),
                                        sendmode=self.recvmode)
 
     def start(self) -> None:
@@ -545,9 +553,11 @@ class VoIPPhone():
         try:
             self.sip.start()
             self._status = PhoneStatus.REGISTERED
+            self.NSD = True
         except Exception:
             self._status = PhoneStatus.FAILED
             self.sip.stop()
+            self.NSD = False
             raise
 
     def stop(self) -> None:
@@ -561,12 +571,7 @@ class VoIPPhone():
         self._status = PhoneStatus.INACTIVE
 
     def call(self, number: str) -> VoIPCall:
-        port = None
-        while port is None:
-            proposed = random.randint(self.rtpPortLow, self.rtpPortHigh)
-            if proposed not in self.assignedPorts:
-                self.assignedPorts.append(proposed)
-                port = proposed
+        port = self.request_port()
         medias = {}
         medias[port] = {
                         0: RTP.PayloadType.PCMU,
@@ -579,3 +584,60 @@ class VoIPPhone():
                                        sendmode=self.sendmode)
 
         return self.calls[call_id]
+
+    def request_port(self, blocking=True) -> int:
+        ports_available = [port for port in range(self.rtpPortLow,
+                           self.rtpPortHigh + 1) if port not in self.assignedPorts]
+        if len(ports_available) == 0:
+            # If no ports are available attempt to cleanup any missed calls.
+            self.release_ports()
+            ports_available = [port for port in range(self.rtpPortLow,
+                               self.rtpPortHigh + 1) if (port not in
+                                                         self.assignedPorts)]
+
+        while self.NSD and blocking and len(ports_available) == 0:
+            ports_available = [port for port in range(self.rtpPortLow,
+                               self.rtpPortHigh + 1) if (port not in
+                                                         self.assignedPorts)]
+            time.sleep(.5)
+            self.release_ports()
+
+            if len(ports_available) == 0:
+                raise NoPortsAvailableError("No ports were available to be assigned")
+
+        selection = random.choice(ports_available)
+        self.assignedPorts.append(selection)
+
+        return selection
+
+    def release_ports(self, call: Optional[VoIPCall] = None) -> None:
+        self.portsLock.acquire()
+        self._cleanup_dead_calls()
+        try:
+            if isinstance(call, VoIPCall):
+                ports = list(call.assignedPorts.keys())
+            else:
+                dnr_ports = []
+                for call_id in self.calls:
+                    dnr_ports += list(self.calls[call_id].assignedPorts.keys())
+                ports = []
+                for port in self.assignedPorts:
+                    if port not in dnr_ports:
+                        ports.append(port)
+
+            for port in ports:
+                index = self.assignedPorts.index(port)
+                self.assignedPorts.pop(index)
+        finally:
+            self.portsLock.release()
+
+    def _cleanup_dead_calls(self) -> None:
+        to_delete = []
+        for thread in self.threads:
+            if not thread.is_alive():
+                call_id = self.threadLookup[thread]
+                del self.calls[call_id]
+                del self.threadLookup[thread]
+                to_delete.append(thread)
+        for thread in to_delete:
+            self.threads.remove(thread)

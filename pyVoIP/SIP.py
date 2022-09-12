@@ -905,10 +905,12 @@ class SIPClient():
         self._close_sockets()
 
     def _close_sockets(self) -> None:
-        if self.s:
-            self.s.close()
-        if self.out:
-            self.out.close()
+        if hasattr(self, 's'):
+            if self.s:
+                self.s.close()
+        if hasattr(self, 'out'):
+            if self.out:
+                self.out.close()
 
     def genCallID(self) -> str:
         warnings.warn("genCallID is deprecated due to PEP8 compliance. " +
@@ -938,7 +940,8 @@ class SIPClient():
         return self.gen_tag()
 
     def gen_tag(self) -> str:
-        while self.NSD:
+        # Keep as True instead of NSD so it can generate a tag on deregister.
+        while True:
             rand = str(random.randint(1, 4294967296)).encode('utf8')
             tag = hashlib.md5(rand).hexdigest()[0:8]
             if tag not in self.tags:
@@ -1443,6 +1446,7 @@ class SIPClient():
             raise TimeoutError('Deregistering on SIP Server timed out')
 
         response = SIPMessage(resp)
+        response = self.trying_timeout_check(response)
 
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
@@ -1495,8 +1499,8 @@ class SIPClient():
             raise TimeoutError('Registering on SIP Server timed out')
 
         response = SIPMessage(resp)
-        if response.status == SIPStatus.TRYING:
-            response = SIPMessage(self.s.recv(8192))
+        response = self.trying_timeout_check(response)
+
         if response.status == SIPStatus(400):
             # Bad Request
             # TODO: implement
@@ -1513,6 +1517,7 @@ class SIPClient():
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
+                response = self.trying_timeout_check(response)
                 if response.status == SIPStatus(401):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
@@ -1586,3 +1591,24 @@ class SIPClient():
         debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
 
         self.recvLock.release()
+
+    def trying_timeout_check(self, response: SIPMessage) -> SIPMessage:
+        """
+        Some servers need time to process the response.
+        When this happens, the first response you get from the server is
+        SIPStatus.TRYING. This while loop tries checks every second for an
+        updated response. It times out after 30 seconds.
+        """
+        start_time = time.monotonic()
+        while response.status == SIPStatus.TRYING:
+            if (time.monotonic() - start_time) >= self.register_timeout:
+                raise TimeoutError(
+                    f"Waited {self.register_timeout} seconds but server is "
+                    + "still TRYING"
+                )
+
+            ready = select.select([self.s], [], [], self.register_timeout)
+            if ready[0]:
+                resp = self.s.recv(8192)
+            response = SIPMessage(resp)
+        return response
