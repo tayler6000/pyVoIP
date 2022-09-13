@@ -340,10 +340,10 @@ class RTPClient:
         self.sin.bind((self.inIP, self.inPort))
         self.sin.setblocking(False)
 
-        r = Timer(1, self.recv)
+        r = Timer(0, self.recv)
         r.name = "RTP Receiver"
         r.start()
-        t = Timer(1, self.trans)
+        t = Timer(0, self.trans)
         t.name = "RTP Transmitter"
         t.start()
 
@@ -379,6 +379,7 @@ class RTPClient:
 
     def trans(self) -> None:
         while self.NSD:
+            last_sent = time.monotonic_ns()
             payload = self.pmout.read()
             payload = self.encodePacket(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
@@ -399,11 +400,21 @@ class RTPClient:
             try:
                 self.sout.sendto(packet, (self.outIP, self.outPort))
             except OSError:
-                pass
+                warnings.warn(
+                    "RTP Packet failed to send!",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
             self.outSequence += 1
             self.outTimestamp += len(payload)
-            time.sleep((1 / self.preference.rate) * 160)  # 1 / 8000 * 160
+            # Calculate how long it took to generate this packet.
+            # Then how long we should wait to send the next, then devide by 2.
+            delay = (1 / self.preference.rate) * 160
+            sleep_time = max(
+                0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
+            )
+            time.sleep(sleep_time / 2)
 
     def parsePacket(self, packet: bytes) -> None:
         warnings.warn(
