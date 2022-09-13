@@ -414,7 +414,7 @@ class RTPClient:
             sleep_time = max(
                 0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
             )
-            time.sleep(sleep_time / 2)
+            time.sleep(sleep_time / 1.75)
 
     def parsePacket(self, packet: bytes) -> None:
         warnings.warn(
