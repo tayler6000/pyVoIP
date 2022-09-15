@@ -414,7 +414,12 @@ class RTPClient:
             sleep_time = max(
                 0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
             )
-            time.sleep(sleep_time / 1.75)
+            time.sleep(sleep_time / self.trans_delay_reduction)
+
+    @property
+    def trans_delay_reduction(self) -> float:
+        reduction = pyVoIP.TRANSMIT_DELAY_REDUCTION + 1
+        return reduction if reduction else 1.0
 
     def parsePacket(self, packet: bytes) -> None:
         warnings.warn(

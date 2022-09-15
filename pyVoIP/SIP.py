@@ -456,11 +456,11 @@ class SIPMessage:
                 x.lstrip(",").rstrip("=")
                 for x in self.auth_match.findall(data)
             ]
-            data = self.auth_match.split(data)
-            data.pop(0)
-            data = [x.strip('"') for x in data]
+            row_data = self.auth_match.split(data)
+            row_data.pop(0)
+            row_data = [x.strip('"') for x in row_data]
             header_data = {}
-            for var, data in zip(vars, data):
+            for var, data in zip(vars, row_data):
                 header_data[var] = data
             self.headers[header] = header_data
             self.authentication = header_data
