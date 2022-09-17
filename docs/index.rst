@@ -27,6 +27,7 @@ In this documentation we will use the following terms:
    :caption: Contents:
 
    Examples
+   Globals
    VoIP
    SIP
    RTP
