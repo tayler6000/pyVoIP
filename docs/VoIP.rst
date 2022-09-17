@@ -63,7 +63,7 @@ VoIP.\ **PhoneStatus**
     This PhoneStatus is used when ``VoIPPhone.stop()`` has been called, but has not finished stopping.
 
   PhoneStatus.\ **FAILED**
-    This PhoneStatus is used when ``VoIPPhone.start()``has been called, but failed to start due to an error.
+    This PhoneStatus is used when ``VoIPPhone.start()`` has been called, but failed to start due to an error.
 
 Classes
 ********
