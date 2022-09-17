@@ -135,7 +135,8 @@ class VoIPCall:
                             )
                             assoc[int(x)] = p
                         except ValueError:
-                            # sometimes rtpmap raise a KeyError because fmtp is set instate
+                            # Sometimes rtpmap raise a KeyError because fmtp
+                            # is set instate
                             pt = i["attributes"][x]["rtpmap"]["name"]
                             warnings.warn(
                                 f"RTP Payload type {pt} not found.",
