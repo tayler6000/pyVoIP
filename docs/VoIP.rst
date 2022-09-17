@@ -11,10 +11,10 @@ There are two errors under ``pyVoIP.VoIP``.
 .. _invalidstateerror:
 
 *exception* VoIP.\ **InvalidStateError**
-  This is thrown when you try to run :ref:`VoIPCall` when you try to perform an action that cannot be performed during the current :ref:`CallState<callstate>`.  For example denying a call that has already been answered, hanging up a call that hasn't been answered yet, or has already been ended.
+  This is thrown by :ref:`VoIPCall` when you try to perform an action that cannot be performed during the current :ref:`CallState<callstate>`.  For example denying a call that has already been answered, hanging up a call that hasn't been answered yet, or has already been ended.
   
 *exception* VoIP.\ **InvalidRangeError**
-  This is thrown by :ref:`VoIPPhone` when you define the rtpPort ranges as rtpPortLow > rtpPortHigh.  However this is not checked by :ref:`VoIPCall`, so if you are using your own class instead of VoIPPhone, make sure these ranges are correct.
+  This is thrown by :ref:`VoIPPhone` when you define the rtpPort ranges as rtpPortLow > rtpPortHigh.  However, this is not checked by :ref:`VoIPCall`, so if you are using your own class instead of VoIPPhone, make sure these ranges are correct.
   
 *exception* VoIP.\ **NoPortsAvailableError**
   This is thrown when a call is attempting to be initiated but no ports are available.
@@ -90,18 +90,24 @@ The VoIPCall class is used to represent a single VoIP Session, which may be to m
      
      
     **dtmfCallback**\ (code: str) -> None
+      *Deprecated.* Please use ``dtmf_callback`` instead.
+
+    **dtmf_callback**\ (code: str) -> None
       This method is called by :ref:`RTPClient`'s when a telephone-event DTMF message is received.  The *code* argument is a string.  It should be an Event in complinace with `RFC 4733 Section 3.2 <https://tools.ietf.org/html/rfc4733#section-3.2>`_.
        
     **getDTMF**\ (length=1) -> str
+      *Deprecated.* Please use ``get_dtmf`` instead.
+
+    **get_dtmf**\ (length=1) -> str
       This method can be called get the next pressed DTMF key.  DTMF's are stored in an ``io.StringIO`` and act as a stack.  Meaning if the :term:`client` presses the numbers 1-9-5 you'll have the following output:
        
       .. code-block:: python
        
-        VoIPCall.getDTMF()
+        VoIPCall.get_dtmf()
         >>> '1'
-        VoIPCall.getDTMF(length=2)
+        VoIPCall.get_dtmf(length=2)
         >>> '95'
-        VoIPCall.getDTMF()
+        VoIPCall.get_dtmf()
         >>> ''
       
       As you can see, calling this method when there a key has not been pressed returns an empty string.
@@ -122,10 +128,16 @@ The VoIPCall class is used to represent a single VoIP Session, which may be to m
       Ends the call but does not send a SIP BYE message to the SIP server.  This function is used to end the call on the server side when the client ended the call.  **THE** :term:`USER<user>` **SHOUND NOT CALL THIS FUNCTION OR THE** :term:`CLIENT<client>` **WILL BE LEFT ON THE LINE WITH NO RESPONSE. CALL HANGUP() INSTEAD.**
       
     **writeAudio**\ (data: bytes) -> None
+      *Deprecated.* Please use ``write_audio`` instead.
+
+    **write_audio**\ (data: bytes) -> None
       Writes linear/raw audio data to the transmit buffer before being encoded and sent.  The *data* argument MUST be bytes.  **This audio must be linear/not encoded,** :ref:`RTPClient` **will encode it before transmitting.**
       
     **readAudio**\ (length=160, blocking=True) -> bytes
-      Reads linear/raw audio data from the received buffer.  Returns *length* amount of bytes.  Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.  When *blocking* is set to true, this function will not return until data is available.  When *blocking* is set to false and data is not available, this function will return bytes(length).
+      *Deprecated.* Please use ``read_audio`` instead.
+
+    **read_audio**\ (length=160, blocking=True) -> bytes
+      Reads linear/raw audio data from the received buffer.  Returns *length* amount of bytes.  Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet.  When *blocking* is set to true, this function will not return until data is available.  When *blocking* is set to false and data is not available, this function will return ``b"\x80" * length``.
     
 .. _VoIPPhone:
 
@@ -154,13 +166,16 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
   **callback**\ (request: :ref:`SIPMessage`) -> None
     This method is called by the :ref:`SIPClient` when an INVITE or BYE request is received.  This function then creates a :ref:`VoIPCall` or terminates it respectively.  When a VoIPCall is created, it will then pass it to the *callCallback* function as an argument.  If *callCallback* is set to None, this function replies as BUSY. **This function should not be called by the** :term:`user`.
 
-  **getStatus**\ ()
+  **getStatus**\ () -> PhoneStatus
+    *Deprecated.* Please use ``get_status`` instead.
+
+  **get_status**\ () -> PhoneStatus
     This method returns the :ref:`PhoneStatus<phonestatus>`.
     
-  **request_port**\ (blocking=True)
+  **request_port**\ (blocking=True) -> int
     This method is called when a new port is needed to use in a :ref:`VoIPCall`.  If blocking is set to True, this will wait until a port is available.  Otherwise, it will raise NoPortsAvailableError.
     
-  **release_ports**\ (call=None)
+  **release_ports**\ (call: Optional[VoIPCall] = None) -> None
     This method is called when a call ends.  If call is provided, it will only release the ports used by that :ref:`VoIPCall`.  Otherwise, it will iterate through all active calls, and release all ports that are no longer in use.
     
   **start**\ () -> None

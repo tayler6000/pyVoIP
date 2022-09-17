@@ -1,7 +1,7 @@
 SIP - Session Initiation Protocol
 ##################################
 
-The SIP module receives, parses, and responds to all incoming SIP requests/messages.  If appropriate, it then forwards them to the *callback* method of :ref:`VoIPPhone`.
+The SIP module receives, parses, and responds to incoming SIP requests/messages.  If appropriate, it then forwards them to the *callback* method of :ref:`VoIPPhone`.
 
 Errors
 *******
@@ -68,17 +68,15 @@ SIPClient
 
 The SIPClient class is used to communicate with the PBX/VoIP server.  It is responsible for registering with the server, and receiving phone calls.
 
-*class* SIP.\ **SIPClient**\ (server: str, port: int, username: str, password: str, myHostname: str, myIP: str = "0.0.0.0", myPort: int = 5060, callCallback: Optional[Callable] = None)
-    The *server* argument is your PBX/VoIP server’s IP.
+*class* SIP.\ **SIPClient**\ (server: str, port: int, username: str, password: str, myIP="0.0.0.0", myPort=5060, callCallback: Optional[Callable[[SIPMessage], None]] = None)
+    The *server* argument is your PBX/VoIP server's IP.
     
-    The *port* argument is your PBX/VoIP server’s port.
+    The *port* argument is your PBX/VoIP server's port.
 
     The *username* argument is your SIP account username on the PBX/VoIP server.
 
     The *password* argument is your SIP account password on the PBX/VoIP server.
 
-    The *myHostname* argument is used to build a URI for your phone to be contacted directly.  Depending on your usecase, this may need to be a private IP, public IP, or a `FQDN <https://en.wikipedia.org/wiki/Fully_qualified_domain_name>`_.
-    
     The *myIP* argument is used to bind a socket and receive incoming SIP requests and responses.
 
     The *myPort* argument is the port SIPClient will bind to, to receive incoming SIP requests and responses. The default for this protocol is port 5060, but any port can be used.
@@ -89,6 +87,9 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     This method is called by SIPClient.start() and is responsible for receiving and parsing through SIP requests.  **This should not be called by the** :term:`user`.
     
   **parseMessage**\ (message: :ref:`SIPMessage`) -> None
+    *Deprecated.* Please use ``parse_message`` instead.
+
+  **parse_message**\ (message: :ref:`SIPMessage`) -> None
     This method is called by SIPClient.recv() and is responsible for parsing through SIP responses.  **This should not be called by the** :term:`user`.
     
   **start**\ () -> None
@@ -98,30 +99,57 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     This method is called by :ref:`VoIPPhone`.stop(). It stops the REGISTER and recv() threads.  It will also close the bound port.  **This should not be called by the** :term:`user`.
     
   **genCallID**\ () -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_call_id**\ () -> str
     This method is called by other 'gen' methods when a new Call-ID header is needed.  See `RFC 3261 Section 20.8 <https://tools.ietf.org/html/rfc3261#section-20.8>`_.  **This should not be called by the** :term:`user`.
 
   **lastCallID**\ () -> str
+    *Deprecated.*  **This should not be called by the** :term:`user`.
+
+  **last_call_id**\ () -> str
     This method is called by other 'gen' methods when the last Call-ID header is needed.  See `RFC 3261 Section 20.8 <https://tools.ietf.org/html/rfc3261#section-20.8>`_.  **This should not be called by the** :term:`user`.
     
   **genTag**\ () -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_tag**\ () -> str
     This method is called by other 'gen' methods when a new tag is needed. See `RFC 3261 Section 8.2.6.2 <https://tools.ietf.org/html/rfc3261#section-8.2.6.2>`_.  **This should not be called by the** :term:`user`.
     
-  **getSIPVersoinNotSupported**\ () -> str
+  **genSIPVersionNotSupported**\ () -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_sip_version_not_supported**\ () -> str
     This method is called by the recv() thread when it has received a SIP message that is not SIP version 2.0.
     
   **genAuthorization**\ (request: :ref:`SIPMessage`) -> bytes
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_authorization**\ (request: :ref:`SIPMessage`) -> bytes
     This calculates the authroization hash in response to the WWW-Authenticate header.  See `RFC 3261 Section 20.7 <https://tools.ietf.org/html/rfc3261#section-20.7>`_.  The *request* argument should be a 401 Unauthorized response.  **This should not be called by the** :term:`user`.
     
   **genRegister**\ (request: :ref:`SIPMessage`, deregister: bool = False) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_register**\ (request: :ref:`SIPMessage`, deregister: bool = False) -> str
     This method generates a SIP REGISTER request. The *request* argument should be a 401 Unauthorized response.  If *deregister* is set to true, a SIP DE-REGISTER request is generated instead.  **This should not be called by the** :term:`user`.
     
   **genBusy**\ (request: :ref:`SIPMessage`) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_busy**\ (request: :ref:`SIPMessage`) -> str
     This method generates a SIP 486 'Busy Here' response.  The *request* argument should be a SIP INVITE request.
     
   **genOk**\ (request: :ref:`SIPMessage`) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_ok**\ (request: :ref:`SIPMessage`) -> str
     This method generates a SIP 200 'Ok' response.  The *request* argument should be a SIP BYE request.
     
   **genInvite**\ (number: str, sess_id: str, ms: dict[int, dict[str, RTP.\ :ref:`PayloadType<payload-type>`]], sendtype: RTP.\ :ref:`TransmitType`, branch: str, call_id: str) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_invite**\ (number: str, sess_id: str, ms: dict[int, dict[str, RTP.\ :ref:`PayloadType<payload-type>`]], sendtype: RTP.\ :ref:`TransmitType`, branch: str, call_id: str) -> str
     This method generates a SIP INVITE request.  This is called by SIPClient.invite().
 
     The *number* argument must be the number being called as a string.
@@ -137,9 +165,15 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     The *call_id* argument must be a unique string.  See `RFC 3261 Section 8.1.1.4 <https://tools.ietf.org/html/rfc3261#section-8.1.1.4>`_.
     
   **genRinging**\ (request: :ref:`SIPMessage`) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_ringing**\ (request: :ref:`SIPMessage`) -> str
     This method generates a SIP 180 'Ringing' response.  The *request* argument should be a SIP INVITE request.
     
   **genAnswer**\ (request: :ref:`SIPMessage`, sess_id: str, ms: list[dict[str, Any]], sendtype: RTP.\ :ref:`TransmitType`)
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_answer**\ (request: :ref:`SIPMessage`, sess_id: str, ms: list[dict[str, Any]], sendtype: RTP.\ :ref:`TransmitType`)
     This method generates a SIP 200 'OK' response.  Which, when in reply to an INVITE request, tells the server the :term:`user` has answered.  **This should not be called by the** :term:`user`.
     
     The *request* argument should be a SIP INVITE request.
@@ -151,9 +185,15 @@ The SIPClient class is used to communicate with the PBX/VoIP server.  It is resp
     The *sendtype* argument should be a RTP.\ :ref:`TransmitType<transmittype>` enum.  This will be used to generate the SDP a tag.   See `RFC 4567 Section 6 <https://tools.ietf.org/html/rfc4567#section-6>`_.
     
   **genBye**\ (request: :ref:`SIPMessage`) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_bye**\ (request: :ref:`SIPMessage`) -> str
     This method generates a SIP BYE request.  This is used to end a call. The *request* argument should be a SIP INVITE request.  **This should not be called by the** :term:`user`.
     
   **genAck**\ (request: :ref:`SIPMessage`) -> str
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **gen_ack**\ (request: :ref:`SIPMessage`) -> str
     This method generates a SIP ACK response.  The *request* argument should be a SIP 401 response.
     
   **invite**\ (number: str, ms: dict[int, dict[str, RTP.\ :ref:`PayloadType<payload-type>`]], sendtype: RTP.\ :ref:`TransmitType`)
@@ -217,13 +257,25 @@ The SIPMessage class is used to parse SIP requests and responses and makes them 
     This method is called by the initialization of the class.  It decides the SIPMessageType, and sends it to the corresponding parse function.  *Data* is the original *data* argument in the initialization of the class.  **This should not be called by the** :term:`user`.
 
   **parseSIPResponse**\ (data: bytes) -> None
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **parse_sip_response**\ (data: bytes) -> None
     This method is called by parse().  It sets the *header*, *version*, and *status* attributes and may raise a :ref:`SIPParseError<sip-parse-error>` if the SIP response is an unsupported SIP version.  It then calls parseHeader() for each header in the request. *Data* is the original *data* argument in the initialization of the class.  **This should not be called by the** :term:`user`.
     
   **parseSIPMessage**\ (data: bytes) -> None
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **parse_sip_message**\ (data: bytes) -> None
     This method is called by parse().  It sets the *header*, *version*, and *method* attributes and may raise a :ref:`SIPParseError<sip-parse-error>` if the SIP request is an unsupported SIP version.  It then calls parseHeader() and parseBody() for each header or tag in the request respectively. *Data* is the original *data* argument in the initialization of the class.  **This should not be called by the** :term:`user`.
     
   **parseHeader**\ (header: str, data: str) -> None
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **parse_header**\ (header: str, data: str) -> None
     This method is called by parseSIPResponse() and parseSIPMessage().  The *header* argument is the name of the header, i.e. 'Call-ID' or 'CSeq', represented as a string.  The *data* argument is the value of the header, i.e. 'Ogq-T7iBmNozoUu3GL9Lvg..' or '1 INVITE', represented as a string.  **This should not be called by the** :term:`user`.
     
   **parseBody**\ (header: str, data: str) -> None
+    *Deprecated.* **This should not be called by the** :term:`user`.
+
+  **parse_body**\ (header: str, data: str) -> None
     This method is called by parseSIPResponse() and parseSIPMessage().  The *header* argument is the name of the SDP tag, i.e. 'm' or 'a', represented as a string.  The *data* argument is the value of the header, i.e. 'audio 56704 RTP/AVP 0' or 'sendrecv', represented as a string.  **This should not be called by the** :term:`user`.
