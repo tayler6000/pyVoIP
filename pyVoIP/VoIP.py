@@ -754,12 +754,12 @@ class VoIPPhone:
                     del self.calls[call_id]
                 except KeyError:
                     debug("Unable to delete from calls dictionary!")
-                    debug(f"{call_id=} {self.calls=}")
+                    debug(f"call_id={call_id} calls={self.calls}")
                 try:
                     del self.threadLookup[thread]
                 except KeyError:
                     debug("Unable to delete from threadLookup dictionary!")
-                    debug(f"{thread=} {self.threadLookup=}")
+                    debug(f"thread={thread} threadLookup={self.threadLookup}")
                 to_delete.append(thread)
         for thread in to_delete:
             self.threads.remove(thread)
