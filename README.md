@@ -34,3 +34,7 @@ if __name__ == "__main__":
     phone.stop()
 ```
 
+### Sponsors
+
+- [Nabu Casa](https://www.nabucasa.com/)
+- [Home Assistant](https://www.home-assistant.io/)
