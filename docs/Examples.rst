@@ -23,11 +23,11 @@ The following will create a phone that answers and automatically hangs up:
       except InvalidStateError:
           pass
   
-    if __name__ == "__main__":
-        phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, myIP=<Your computer's local IP>, callCallback=answer)
-        phone.start()
-        input('Press enter to disable the phone')
-        phone.stop()
+  if __name__ == "__main__":
+      phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, myIP=<Your computer's local IP>, callCallback=answer)
+      phone.start()
+      input('Press enter to disable the phone')
+      phone.stop()
     
 Announcement Board
 ******************
