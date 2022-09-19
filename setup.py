@@ -7,7 +7,7 @@ with open("README.md", "r", encoding='utf-8') as f:
 
 setup(
     name='pyVoIP',
-    version='1.6.0',
+    version='2.0.0-dev',
     description='PyVoIP is a pure python VoIP/SIP/RTP library.',
     long_description=long_description,
     long_description_content_type="text/markdown",

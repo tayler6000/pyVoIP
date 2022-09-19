@@ -24,7 +24,7 @@ copyright = '2022, Tayler Porter'
 author = 'Tayler J Porter'
 
 # The full version, including alpha/beta/rc tags
-release = '1.6.0'
+release = '2.0.0'
 
 master_doc = 'index'
 
