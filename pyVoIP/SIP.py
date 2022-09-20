@@ -9,7 +9,6 @@ import re
 import time
 import uuid
 import select
-import warnings
 
 
 if TYPE_CHECKING:
