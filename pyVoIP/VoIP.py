@@ -56,7 +56,7 @@ class VoIPCall:
         callstate: CallState,
         request: SIP.SIPMessage,
         session_id: int,
-        myIP: str,
+        bind_ip: str,
         ms: Optional[Dict[int, RTP.PayloadType]] = None,
         sendmode="sendonly",
     ):
@@ -66,9 +66,9 @@ class VoIPCall:
         self.request = request
         self.call_id = request.headers["Call-ID"]
         self.session_id = str(session_id)
-        self.myIP = myIP
-        self.rtpPortHigh = self.phone.rtpPortHigh
-        self.rtpPortLow = self.phone.rtpPortLow
+        self.bind_ip = bind_ip
+        self.rtp_port_high = self.phone.rtp_port_high
+        self.rtp_port_low = self.phone.rtp_port_low
         self.sendmode = sendmode
 
         self.dtmfLock = Lock()
@@ -172,7 +172,7 @@ class VoIPCall:
 
                 port = self.phone.request_port()
                 self.create_rtp_clients(
-                    codecs, self.myIP, port, request, i["port"]
+                    codecs, self.bind_ip, port, request, i["port"]
                 )
         elif callstate == CallState.DIALING:
             if ms is None:
@@ -234,7 +234,7 @@ class VoIPCall:
         m = {}
         for x in self.RTPClients:
             x.start()
-            m[x.inPort] = x.assoc
+            m[x.in_port] = x.assoc
 
         return m
 
@@ -250,8 +250,8 @@ class VoIPCall:
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
             ):
-                client.outIP = request.body["c"][ii]["address"]
-                client.outPort = i["port"] + ii  # TODO: Check IPv4/IPv6
+                client.out_ip = request.body["c"][ii]["address"]
+                client.out_port = i["port"] + ii  # TODO: Check IPv4/IPv6
 
     def answer(self) -> None:
         if self.state != CallState.RINGING:
@@ -289,7 +289,7 @@ class VoIPCall:
                 raise RTP.RTPParseError(f"RTP Payload type {p} not found.")
 
             self.create_rtp_clients(
-                assoc, self.myIP, self.port, request, i["port"]
+                assoc, self.bind_ip, self.port, request, i["port"]
             )
 
         for x in self.RTPClients:
@@ -401,17 +401,20 @@ class VoIPPhone:
         port: int,
         username: str,
         password: str,
-        myIP="0.0.0.0",
+        bind_ip="0.0.0.0",
+        bind_port=5060,
+        transport_mode=SIP.TransportMode.UDP,
         call_callback: Optional[Callable[["VoIPCall"], None]] = None,
-        sipPort=5060,
-        rtpPortLow=10000,
-        rtpPortHigh=20000,
+        rtp_port_low=10000,
+        rtp_port_high=20000,
     ):
-        if rtpPortLow > rtpPortHigh:
-            raise InvalidRangeError("'rtpPortHigh' must be >= 'rtpPortLow'")
+        if rtp_port_low > rtp_port_high:
+            raise InvalidRangeError(
+                "'rtp_port_high' must be >= 'rtp_port_low'"
+            )
 
-        self.rtpPortLow = rtpPortLow
-        self.rtpPortHigh = rtpPortHigh
+        self.rtp_port_low = rtp_port_low
+        self.rtp_port_high = rtp_port_high
         self.NSD = False
 
         self.portsLock = Lock()
@@ -420,11 +423,12 @@ class VoIPPhone:
 
         self.server = server
         self.port = port
-        self.myIP = myIP
+        self.bind_ip = bind_ip
         self.username = username
         self.password = password
         self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
+        self.transport_mode = transport_mode
 
         # "recvonly", "sendrecv", "sendonly", "inactive"
         self.sendmode = "sendrecv"
@@ -439,9 +443,10 @@ class VoIPPhone:
             port,
             username,
             password,
-            myIP=self.myIP,
-            myPort=sipPort,
+            bind_ip=self.bind_ip,
+            bind_port=bind_port,
             call_callback=self.callback,
+            transport_mode=self.transport_mode,
         )
 
     def callback(self, request: SIP.SIPMessage) -> None:
@@ -567,7 +572,7 @@ class VoIPPhone:
             CallState.RINGING,
             request,
             sess_id,
-            self.myIP,
+            self.bind_ip,
             sendmode=self.recvmode,
         )
 
@@ -605,7 +610,7 @@ class VoIPPhone:
             CallState.DIALING,
             request,
             sess_id,
-            self.myIP,
+            self.bind_ip,
             ms=medias,
             sendmode=self.sendmode,
         )
@@ -615,7 +620,7 @@ class VoIPPhone:
     def request_port(self, blocking=True) -> int:
         ports_available = [
             port
-            for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+            for port in range(self.rtp_port_low, self.rtp_port_high + 1)
             if port not in self.assignedPorts
         ]
         if len(ports_available) == 0:
@@ -623,14 +628,14 @@ class VoIPPhone:
             self.release_ports()
             ports_available = [
                 port
-                for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+                for port in range(self.rtp_port_low, self.rtp_port_high + 1)
                 if (port not in self.assignedPorts)
             ]
 
         while self.NSD and blocking and len(ports_available) == 0:
             ports_available = [
                 port
-                for port in range(self.rtpPortLow, self.rtpPortHigh + 1)
+                for port in range(self.rtp_port_low, self.rtp_port_high + 1)
                 if (port not in self.assignedPorts)
             ]
             time.sleep(0.5)

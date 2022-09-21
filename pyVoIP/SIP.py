@@ -9,6 +9,7 @@ import re
 import time
 import uuid
 import select
+import ssl
 
 
 if TYPE_CHECKING:
@@ -327,6 +328,41 @@ class SIPMessageType(IntEnum):
 
     MESSAGE = 1
     RESPONSE = 0
+
+
+class TransportMode(Enum):
+    def __new__(
+        cls,
+        value: str,
+        socket_type: socket.SocketKind,
+        tls_mode: Optional[int],
+    ):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj.socket_type = socket_type
+        obj.tls_mode = tls_mode
+
+        return obj
+
+    @property
+    def socket_type(self) -> socket.SocketKind:
+        return self._socket_type
+
+    @socket_type.setter
+    def socket_type(self, value: socket.SocketKind) -> None:
+        self._socket_type = value
+
+    @property
+    def tls_mode(self) -> Optional[int]:
+        return self._tls_mode
+
+    @tls_mode.setter
+    def tls_mode(self, value: Optional[int]) -> None:
+        self._tls_mode = value
+
+    UDP = ("UDP", socket.SOCK_DGRAM, None)
+    TCP = ("TCP", socket.SOCK_STREAM, None)
+    TLS = ("TLS", socket.SOCK_STREAM, ssl.PROTOCOL_TLS)
 
 
 class SIPMessage:
@@ -766,23 +802,24 @@ class SIPClient:
         port: int,
         username: str,
         password: str,
-        myIP="0.0.0.0",
-        myPort=5060,
+        bind_ip="0.0.0.0",
+        bind_port=5060,
         call_callback: Optional[Callable[[SIPMessage], None]] = None,
+        transport_mode: TransportMode = TransportMode.UDP,
     ):
         self.NSD = False
         self.server = server
         self.port = port
-        self.myIP = myIP
+        self.bind_ip = bind_ip
+        self.bind_port = bind_port
         self.username = username
         self.password = password
+        self.transport_mode = transport_mode
 
         self.call_callback = call_callback
 
         self.tags: List[str] = []
         self.tagLibrary = {"register": self.gen_tag()}
-
-        self.myPort = myPort
 
         self.default_expires = 120
         self.register_timeout = 30
@@ -899,13 +936,17 @@ class SIPClient:
         if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
         self.NSD = True
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.s.bind((self.myIP, self.myPort))
+        self.s = socket.socket(socket.AF_INET, self.transport_mode.socket_type)
+        # self.out = socket.socket(socket.AF_INET, self.transport_mode.socket_type)
+        if self.transport_mode.tls_mode:
+            ctx = ssl.SSLContext(protocol=self.transport_mode.tls_mode)
+            self.s = ctx.wrap_socket(self.s)
+            # self.out = ctx.wrap_socket(self.out)
+        self.s.bind((self.bind_ip, self.bind_port))
         self.out = self.s
         self.register()
         t = Timer(1, self.recv)
-        t.name = "SIP Recieve"
+        t.name = "SIP Receive"
         t.start()
 
     def stop(self) -> None:
@@ -927,12 +968,12 @@ class SIPClient:
     def gen_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.next()).encode("utf8"))
         hhash = hash.hexdigest()
-        return f"{hhash[0:32]}@{self.myIP}:{self.myPort}"
+        return f"{hhash[0:32]}@{self.bind_ip}:{self.bind_port}"
 
     def gen_last_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.current() - 1).encode("utf8"))
         hhash = hash.hexdigest()
-        return f"{hhash[0:32]}@{self.myIP}:{self.myPort}"
+        return f"{hhash[0:32]}@{self.bind_ip}:{self.bind_port}"
 
     def gen_tag(self) -> str:
         # Keep as True instead of NSD so it can generate a tag on deregister.
@@ -1004,7 +1045,7 @@ class SIPClient:
     def gen_first_request(self, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
-            f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};"
+            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};"
             + f"branch={self.gen_branch()};rport\r\n"
         )
         regRequest += (
@@ -1020,7 +1061,7 @@ class SIPClient:
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort};"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
             + "transport=UDP>;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
@@ -1041,7 +1082,7 @@ class SIPClient:
     def gen_subscribe(self, response: SIPMessage) -> str:
         subRequest = f"SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n"
         subRequest += (
-            f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};"
+            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};"
             + f"branch={self.gen_branch()};rport\r\n"
         )
         subRequest += (
@@ -1055,7 +1096,7 @@ class SIPClient:
         # TODO: check if transport is needed
         subRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort};"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
             + "transport=UDP>;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
@@ -1076,7 +1117,7 @@ class SIPClient:
 
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
-            f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch="
+            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
             + f"{self.gen_branch()};rport\r\n"
         )
         regRequest += (
@@ -1092,7 +1133,7 @@ class SIPClient:
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort};"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
             + "transport=UDP>;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
@@ -1196,10 +1237,12 @@ class SIPClient:
         # Generate body first for content length
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
-        body += f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.myIP}\r\n"
+        body += (
+            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.bind_ip}\r\n"
+        )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
         # TODO: Check IPv4/IPv6
-        body += f"c=IN IP4 {self.myIP}\r\n"
+        body += f"c=IN IP4 {self.bind_ip}\r\n"
         body += "t=0 0\r\n"
         for x in ms:
             # TODO: Check AVP mode from request
@@ -1232,7 +1275,7 @@ class SIPClient:
         )
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort}>\r\n"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         # TODO: Add Supported
         regRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
@@ -1255,9 +1298,11 @@ class SIPClient:
         # Generate body first for content length
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
-        body += f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.myIP}\r\n"
+        body += (
+            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.bind_ip}\r\n"
+        )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
-        body += f"c=IN IP4 {self.myIP}\r\n"  # TODO: Check IPv4/IPv6
+        body += f"c=IN IP4 {self.bind_ip}\r\n"  # TODO: Check IPv4/IPv6
         body += "t=0 0\r\n"
         for x in ms:
             # TODO: Check AVP mode from request
@@ -1279,16 +1324,18 @@ class SIPClient:
 
         invRequest = f"INVITE sip:{number}@{self.server} SIP/2.0\r\n"
         invRequest += (
-            f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch="
+            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
             + f"{branch}\r\n"
         )
         invRequest += "Max-Forwards: 70\r\n"
         invRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort}>\r\n"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         invRequest += f"To: <sip:{number}@{self.server}>\r\n"
-        invRequest += f"From: <sip:{self.username}@{self.myIP}>;tag={tag}\r\n"
+        invRequest += (
+            f"From: <sip:{self.username}@{self.bind_ip}>;tag={tag}\r\n"
+        )
         invRequest += f"Call-ID: {call_id}\r\n"
         invRequest += f"CSeq: {self.inviteCounter.next()} INVITE\r\n"
         invRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -1323,7 +1370,7 @@ class SIPClient:
         byeRequest += f"CSeq: {cseq} BYE\r\n"
         byeRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.myIP}:{self.myPort}>\r\n"
+            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         byeRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         byeRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -1466,7 +1513,7 @@ class SIPClient:
                         "Invalid Username or "
                         + "Password for SIP server "
                         + f"{self.server}:"
-                        + f"{self.myPort}"
+                        + f"{self.bind_port}"
                     )
                 elif response.status == SIPStatus(400):
                     # Bad Request
@@ -1530,7 +1577,7 @@ class SIPClient:
                         "Invalid Username or "
                         + "Password for SIP server "
                         + f"{self.server}:"
-                        + f"{self.myPort}"
+                        + f"{self.bind_port}"
                     )
                 elif response.status == SIPStatus(400):
                     # Bad Request
@@ -1580,7 +1627,7 @@ class SIPClient:
             raise InvalidAccountInfoError(
                 "Invalid Username or Password for "
                 + f"SIP server {self.server}:"
-                + f"{self.myPort}"
+                + f"{self.bind_port}"
             )
 
     def _handle_bad_request(self) -> None:

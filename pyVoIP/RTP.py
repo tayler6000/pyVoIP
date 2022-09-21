@@ -294,10 +294,10 @@ class RTPClient:
     def __init__(
         self,
         assoc: Dict[int, PayloadType],
-        inIP: str,
-        inPort: int,
-        outIP: str,
-        outPort: int,
+        in_ip: str,
+        in_port: int,
+        out_ip: str,
+        out_port: int,
         sendrecv: TransmitType,
         dtmf: Optional[Callable[[str], None]] = None,
     ):
@@ -319,10 +319,10 @@ class RTPClient:
             except Exception:
                 debug(f"{assoc[m]} cannot be selected as an audio codec")
 
-        self.inIP = inIP
-        self.inPort = inPort
-        self.outIP = outIP
-        self.outPort = outPort
+        self.in_ip = in_ip
+        self.in_port = in_port
+        self.out_ip = out_ip
+        self.out_port = out_port
 
         self.dtmf = dtmf
 
@@ -337,7 +337,7 @@ class RTPClient:
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sin.bind((self.inIP, self.inPort))
+        self.sin.bind((self.in_ip, self.in_port))
         self.sin.setblocking(False)
 
         r = Timer(0, self.recv)
@@ -398,7 +398,7 @@ class RTPClient:
             # debug(payload)
 
             try:
-                self.sout.sendto(packet, (self.outIP, self.outPort))
+                self.sout.sendto(packet, (self.out_ip, self.out_port))
             except OSError:
                 warnings.warn(
                     "RTP Packet failed to send!",
