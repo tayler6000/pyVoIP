@@ -341,7 +341,7 @@ class SIPMessage:
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
         self.raw = data
-        self.auth_match = re.compile(",?[a-zA-Z0-9]*=")
+        self.auth_match = re.compile('(\w+)=("\w+"|\w+)')
         self.parse(data)
 
     def summary(self) -> str:
@@ -452,16 +452,10 @@ class SIPMessage:
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
             data = data.replace("Digest ", "")
-            vars = [
-                x.lstrip(",").rstrip("=")
-                for x in self.auth_match.findall(data)
-            ]
-            row_data = self.auth_match.split(data)
-            row_data.pop(0)
-            row_data = [x.strip('"') for x in row_data]
+            row_data = self.auth_match.findall(data)
             header_data = {}
-            for var, data in zip(vars, row_data):
-                header_data[var] = data
+            for var, data in row_data:
+                header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
         else:
