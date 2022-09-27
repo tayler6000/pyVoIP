@@ -341,7 +341,7 @@ class SIPMessage:
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
         self.raw = data
-        self.auth_match = re.compile('(\w+)=("[^",]+"|[^ \t,]+)')
+        self.auth_match = re.compile(r'(\w+)=("[^",]+"|[^ \t,]+)')
         self.parse(data)
 
     def summary(self) -> str:
