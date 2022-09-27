@@ -376,7 +376,7 @@ class SIPMessage:
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
         self.raw = data
-        self.auth_match = re.compile(",?[a-zA-Z0-9]*=")
+        self.auth_match = re.compile(r'(\w+)=("[^",]+"|[^ \t,]+)')
         self.parse(data)
 
     def summary(self) -> str:
@@ -392,6 +392,9 @@ class SIPMessage:
         data += "Body:\n"
         for x in self.body:
             data += f"{x}: {self.body[x]}\n"
+        data += "\n"
+        data += "Raw:\n"
+        data += str(self.raw)
 
         return data
 
@@ -478,16 +481,10 @@ class SIPMessage:
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
             data = data.replace("Digest ", "")
-            vars = [
-                x.lstrip(",").rstrip("=")
-                for x in self.auth_match.findall(data)
-            ]
-            row_data = self.auth_match.split(data)
-            row_data.pop(0)
-            row_data = [x.strip('"') for x in row_data]
+            row_data = self.auth_match.findall(data)
             header_data = {}
-            for var, data in zip(vars, row_data):
-                header_data[var] = data
+            for var, data in row_data:
+                header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
         else:
@@ -1550,6 +1547,7 @@ class SIPClient:
 
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
+        first_response = response
 
         if response.status == SIPStatus(400):
             # Bad Request
@@ -1572,7 +1570,17 @@ class SIPClient:
                 if response.status == SIPStatus(401):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
-                    debug("Unauthorized")
+                    debug("=" * 50)
+                    debug("Unauthorized, SIP Message Log:\n")
+                    debug("SENT")
+                    debug(firstRequest)
+                    debug("\nRECEIVED")
+                    debug(first_response.summary())
+                    debug("\nSENT (DO NOT SHARE THIS PACKET)")
+                    debug(regRequest)
+                    debug("\nRECEIVED")
+                    debug(response.summary())
+                    debug("=" * 50)
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
