@@ -357,6 +357,9 @@ class SIPMessage:
         data += "Body:\n"
         for x in self.body:
             data += f"{x}: {self.body[x]}\n"
+        data += "\n"
+        data += "Raw:\n"
+        data += str(self.raw)
 
         return data
 
