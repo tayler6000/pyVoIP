@@ -296,6 +296,21 @@ class SIPMessage:
         self.authentication: Dict[str, str] = {}
         self.raw = data
         self.auth_match = re.compile(",?[a-zA-Z0-9]*=")
+
+        # Compacts defined in RFC 3261 Section 7.3.3 and 20
+        self.compact_key = {
+            "i": "Call-ID",
+            "m": "Contact",
+            "e": "Content-Encoding",
+            "l": "Content-Length",
+            "c": "Content-Type",
+            "f": "From",
+            "s": "Subject",
+            "k": "Supported",
+            "t": "To",
+            "v": "Via",
+        }
+
         self.parse(data)
 
     def summary(self) -> str:
@@ -337,6 +352,10 @@ class SIPMessage:
             )
 
     def parse_header(self, header: str, data: str) -> None:
+
+        if header in self.compact_key.keys():
+            header = self.compact_key[header]
+
         if header == "Via":
             for d in data:
                 info = re.split(" |;", d)
@@ -361,30 +380,42 @@ class SIPMessage:
                     else:
                         _via[x] = None
                 self.headers["Via"].append(_via)
-        elif header == "From" or header == "To":
+        elif header in ["From", "To"]:
             info = data.split(";tag=")
             tag = ""
             if len(info) >= 2:
                 tag = info[1]
-            raw = info[0]
-            # fix issue 41 part 1
-            contact = re.split(r"<?sip:", raw)
-            contact[0] = contact[0].strip('"').strip("'")
-            address = contact[1].strip(">")
-            if len(address.split("@")) == 2:
-                number = address.split("@")[0]
-                host = address.split("@")[1]
-            else:
-                number = None
-                host = address
+            raw = data
+            reg = re.compile(
+                r'(?P<display_name>"?[\w ]+"? )?<?(?P<uri_type>sips?):(?P<user>[\w+]+)(?P<password>:\w+)?@(?P<host>[\w.]+)(?P<port>:[0-9]+)?>?'
+            )
+            matches = reg.match(data).groupdict()
+            uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
+            if matches["port"]:
+                uri += matches["port"]
+            uri_type = matches["uri_type"]
+            user = matches["user"]
+            password = (
+                matches["password"].strip(":") if matches["password"] else ""
+            )
+            display_name = (
+                matches["display_name"].strip().strip('"')
+                if matches["display_name"]
+                else ""
+            )
+            host = matches["host"]
+            port = int(matches["port"].strip(":")) if matches["port"] else 5060
 
             self.headers[header] = {
                 "raw": raw,
                 "tag": tag,
-                "address": address,
-                "number": number,
-                "caller": contact[0],
+                "uri": uri,
+                "uri-type": uri_type,
+                "user": user,
+                "password": password,
+                "display-name": display_name,
                 "host": host,
+                "port": port,
             }
         elif header == "CSeq":
             self.headers[header] = {

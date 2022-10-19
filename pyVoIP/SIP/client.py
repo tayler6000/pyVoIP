@@ -162,6 +162,12 @@ class SIPClient:
             self.call_callback(message)  # type: ignore
             response = self.gen_ok(message)
             self.out.sendto(response.encode("utf8"), (self.server, self.port))
+        elif message.method == "OPTIONS":
+            if self.call_callback:
+                response = self.call_callback(message)
+            else:
+                response = self._gen_options_response(message)
+            self.out.sendto(response.encode("utf8"), (self.server, self.port))
         else:
             debug("TODO: Add 400 Error on non processable request")
 
@@ -227,12 +233,10 @@ class SIPClient:
         # TODO: Add Supported
         response = "SIP/2.0 505 SIP Version Not Supported\r\n"
         response += self._gen_response_via_header(request)
+        response += f"From: {request.headers['From']['raw']}\r\n"
+        to = request.headers["To"]
         response += (
-            f"From: {request.headers['From']['raw']};tag="
-            + f"{request.headers['From']['tag']}\r\n"
-        )
-        response += (
-            f"To: {request.headers['To']['raw']};tag="
+            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
             + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
@@ -397,12 +401,10 @@ class SIPClient:
     def gen_busy(self, request: SIPMessage) -> str:
         response = "SIP/2.0 486 Busy Here\r\n"
         response += self._gen_response_via_header(request)
+        response += f"From: {request.headers['From']['raw']}\r\n"
+        to = request.headers["To"]
         response += (
-            f"From: {request.headers['From']['raw']};tag="
-            + f"{request.headers['From']['tag']}\r\n"
-        )
-        response += (
-            f"To: {request.headers['To']['raw']};tag="
+            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
             + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
@@ -422,12 +424,10 @@ class SIPClient:
     def gen_ok(self, request: SIPMessage) -> str:
         okResponse = "SIP/2.0 200 OK\r\n"
         okResponse += self._gen_response_via_header(request)
+        okResponse += f"From: {request.headers['From']['raw']}\r\n"
+        to = request.headers["To"]
         okResponse += (
-            f"From: {request.headers['From']['raw']};tag="
-            + f"{request.headers['From']['tag']}\r\n"
-        )
-        okResponse += (
-            f"To: {request.headers['To']['raw']};tag="
+            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
             + f"{self.gen_tag()}\r\n"
         )
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
@@ -445,11 +445,9 @@ class SIPClient:
         tag = self.gen_tag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._gen_response_via_header(request)
-        regRequest += (
-            f"From: {request.headers['From']['raw']};tag="
-            + f"{request.headers['From']['tag']}\r\n"
-        )
-        regRequest += f"To: {request.headers['To']['raw']};tag={tag}\r\n"
+        regRequest += f"From: {request.headers['From']['raw']}\r\n"
+        to = request.headers["To"]
+        regRequest += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={tag}\r\n'
         regRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         regRequest += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -501,11 +499,9 @@ class SIPClient:
 
         regRequest = "SIP/2.0 200 OK\r\n"
         regRequest += self._gen_response_via_header(request)
-        regRequest += (
-            f"From: {request.headers['From']['raw']};tag="
-            + f"{request.headers['From']['tag']}\r\n"
-        )
-        regRequest += f"To: {request.headers['To']['raw']};tag={tag}\r\n"
+        regRequest += f"From: {request.headers['From']['raw']}"
+        to = request.headers["To"]
+        regRequest += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={tag}\r\n'
         regRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         regRequest += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -589,19 +585,15 @@ class SIPClient:
         c = request.headers["Contact"].strip("<").strip(">")
         byeRequest = f"BYE {c} SIP/2.0\r\n"
         byeRequest += self._gen_response_via_header(request)
-        fromH = request.headers["From"]["raw"]
-        toH = request.headers["To"]["raw"]
+        _from = request.headers["From"]
+        fromH = f' "{_from["display-name"]}" <{_from["uri"]}>'
+        to = request.headers["To"]
+        toH = f' "{to["display-name"]}" <{to["uri"]}>'
         if request.headers["From"]["tag"] == tag:
             byeRequest += f"From: {fromH};tag={tag}\r\n"
-            if request.headers["To"]["tag"] != "":
-                to = toH + ";tag=" + request.headers["To"]["tag"]
-            else:
-                to = toH
-            byeRequest += f"To: {to}\r\n"
+            byeRequest += f"To: {to['raw']}\r\n"
         else:
-            byeRequest += (
-                f"To: {fromH};tag=" + f"{request.headers['From']['tag']}\r\n"
-            )
+            byeRequest += f"To: {_from['raw']}\r\n"
             byeRequest += f"From: {toH};tag={tag}\r\n"
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         cseq = int(request.headers["CSeq"]["check"]) + 1
@@ -622,17 +614,21 @@ class SIPClient:
         ackMessage = f"ACK {t} SIP/2.0\r\n"
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
+        to = request.headers["To"]
+        ackMessage += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={self.gen_tag()}\r\n'
+        _from = request.headers["From"]
         ackMessage += (
-            f"To: {request.headers['To']['raw']};tag="
-            + f"{self.gen_tag()}\r\n"
+            f'From: "{_from["display-name"]}" <{_from["uri"]}>;tag={tag}\r\n'
         )
-        ackMessage += f"From: {request.headers['From']['raw']};tag={tag}\r\n"
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
         ackMessage += f"CSeq: {request.headers['CSeq']['check']} ACK\r\n"
         ackMessage += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         ackMessage += "Content-Length: 0\r\n\r\n"
 
         return ackMessage
+
+    def _gen_options_response(self, request: SIPMessage) -> str:
+        return self.gen_busy(request)
 
     def _gen_response_via_header(self, request: SIPMessage) -> str:
         via = ""
@@ -788,6 +784,7 @@ class SIPClient:
 
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
+        first_response = response
 
         if response.status == SIPStatus(400):
             # Bad Request
@@ -810,7 +807,17 @@ class SIPClient:
                 if response.status == SIPStatus(401):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
-                    debug("Unauthorized")
+                    debug("=" * 50)
+                    debug("Unauthorized, SIP Message Log:\n")
+                    debug("SENT")
+                    debug(firstRequest)
+                    debug("\nRECEIVED")
+                    debug(first_response.summary())
+                    debug("\nSENT (DO NOT SHARE THIS PACKET)")
+                    debug(regRequest)
+                    debug("\nRECEIVED")
+                    debug(response.summary())
+                    debug("=" * 50)
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "

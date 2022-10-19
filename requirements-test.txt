@@ -1,1 +1,2 @@
-black==22.8.0
+black
+pytest
