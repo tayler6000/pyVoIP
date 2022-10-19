@@ -1400,7 +1400,7 @@ class SIPClient:
         return ackMessage
 
     def _gen_options_response(self, request: SIPMessage) -> str:
-        return gen_busy(request)
+        return self.gen_busy(request)
 
     def _gen_response_via_header(self, request: SIPMessage) -> str:
         via = ""
