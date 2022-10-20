@@ -68,21 +68,25 @@ class VoIPSocket:
     def __init__(
         self,
         mode: TransportMode,
-        certfile: Optional[str] = None,
-        keyfile: Optional[str] = None,
+        cert_file: Optional[str] = None,
+        key_file: Optional[str] = None,
+        key_password: Optional[Union] = None,
     ):
         self.mode = mode
         self.listening_for: Dict[str, List[str]] = {}
         self.s = socket.socket(socket.AF_INET, mode.socket_type)
+        self.server_context = None
         if mode.tls_mode:
-            ctx = ssl.SSLContext(protocol=mode.tls_mode)
+            self.server_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
+            if certfile:
+                ctx.load_cert_chain(cert_file, key_file, key_password)
             ctx.load_default_certs()
-            self.s = ctx.wrap_socket(self.s)
+            # self.s = ctx.wrap_socket(self.s)
 
     def bind(self, addr: Tuple[str, int]) -> None:
         return self.s.bind(addr)
 
-    def listen(self, backlog=0) -> None:
+    def _listen(self, backlog=0) -> None:
         return self.s.listen(backlog)
 
     def start(self, addr: Tuple[str, int]) -> None:
@@ -92,7 +96,7 @@ class VoIPSocket:
         """
         self.bind(addr)
         if self.mode != TransportMode.UDP:
-            self.listen()
+            self._listen()
 
     def close(self) -> None:
         self.s.shutdown(socket.SHUT_RDWR)
