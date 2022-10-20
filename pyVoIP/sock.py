@@ -1,7 +1,18 @@
 from enum import Enum
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import socket
-import ssl
+import warnings
+
+try:
+    import ssl
+
+    SSL_SUPPORTED = True
+except Exception:
+    SSL_SUPPORTED = False
+    warnings.warn(
+        "SSL/TLS is not available, do you have OpenSSL installed?",
+        RuntimeWarning,
+    )
 
 
 class TransportMode(Enum):
@@ -11,7 +22,17 @@ class TransportMode(Enum):
         socket_type: socket.SocketKind,
         tls_mode: Optional[int],
     ):
+        global SSL_SUPPORTED
         obj = object.__new__(cls)
+        if value == "TLS" and SSL_SUPPORTED is False:
+            """
+            This should cause an error if someone tries to use TLS without
+            OpenSSL, but has a potential benifit of self correcting if OpenSSL
+            somehow becomes available later, though I don't think that's possible.
+            """
+            import ssl
+
+            SSL_SUPPORTED = True
         obj._value_ = value
         obj.socket_type = socket_type
         obj.tls_mode = tls_mode
@@ -39,12 +60,19 @@ class TransportMode(Enum):
 
     UDP = ("UDP", socket.SOCK_DGRAM, None)
     TCP = ("TCP", socket.SOCK_STREAM, None)
-    TLS = ("TLS", socket.SOCK_STREAM, ssl.PROTOCOL_TLS)
+    if SSL_SUPPORTED:
+        TLS = ("TLS", socket.SOCK_STREAM, ssl.PROTOCOL_TLS)
 
 
 class VoIPSocket:
-    def __init__(self, mode: TransportMode):
+    def __init__(
+        self,
+        mode: TransportMode,
+        certfile: Optional[str] = None,
+        keyfile: Optional[str] = None,
+    ):
         self.mode = mode
+        self.listening_for: Dict[str, List[str]] = {}
         self.s = socket.socket(socket.AF_INET, mode.socket_type)
         if mode.tls_mode:
             ctx = ssl.SSLContext(protocol=mode.tls_mode)
@@ -72,7 +100,8 @@ class VoIPSocket:
 
     def sendto(self, bytes: bytes, addr: Tuple[str, int]) -> None:
         if self.mode == TransportMode.UDP:
-            return self.s.sendto(bytes, addr)
+            self.s.sendto(bytes, addr)
+            return self
         self.s.connect(addr)
         self.s.send(bytes)
         self.s.shutdown(socket.SHUT_RDWR)

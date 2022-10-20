@@ -1,8 +1,8 @@
 from enum import Enum, IntEnum
+from pyVoIP import regex
 from pyVoIP.SIP.error import SIPParseError
 from typing import Any, Callable, Dict, List, Optional
 import pyVoIP
-import re
 
 
 debug = pyVoIP.debug
@@ -295,7 +295,7 @@ class SIPMessage:
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
         self.raw = data
-        self.auth_match = re.compile(",?[a-zA-Z0-9]*=")
+        self.auth_match = regex.AUTH_MATCH
 
         # Compacts defined in RFC 3261 Section 7.3.3 and 20
         self.compact_key = {
@@ -326,6 +326,9 @@ class SIPMessage:
         data += "Body:\n"
         for x in self.body:
             data += f"{x}: {self.body[x]}\n"
+        data += "\n"
+        data += "Raw:\n"
+        data += str(self.raw)
 
         return data
 
@@ -358,7 +361,7 @@ class SIPMessage:
 
         if header == "Via":
             for d in data:
-                info = re.split(" |;", d)
+                info = regex.VIA_SPLIT.split(d)
                 _type = info[0]  # SIP Method
                 _address = info[1].split(":")  # Tuple: address, port
                 _ip = _address[0]
@@ -386,10 +389,17 @@ class SIPMessage:
             if len(info) >= 2:
                 tag = info[1]
             raw = data
-            reg = re.compile(
-                r'(?P<display_name>"?[\w ]+"? )?<?(?P<uri_type>sips?):(?P<user>[\w+]+)(?P<password>:\w+)?@(?P<host>[\w.]+)(?P<port>:[0-9]+)?>?'
-            )
-            matches = reg.match(data).groupdict()
+            reg = regex.TO_FROM_MATCH
+            match = reg.match(data)
+            if type(match) != regex.Match:
+                raise SIPParseMessage(
+                    "Regex failed to match To/From.\n\n"
+                    + "Please open a GitHub Issue at "
+                    + "https://www.github.com/tayler6000/pyVoIP "
+                    + "and include the following:\n\n"
+                    + f"{data=}"
+                )
+            matches = match.groupdict()
             uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
             if matches["port"]:
                 uri += matches["port"]
@@ -428,16 +438,10 @@ class SIPMessage:
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
             data = data.replace("Digest ", "")
-            vars = [
-                x.lstrip(",").rstrip("=")
-                for x in self.auth_match.findall(data)
-            ]
-            row_data = self.auth_match.split(data)
-            row_data.pop(0)
-            row_data = [x.strip('"') for x in row_data]
+            row_data = self.auth_match.findall(data)
             header_data = {}
-            for var, data in zip(vars, row_data):
-                header_data[var] = data
+            for var, data in row_data:
+                header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
         else:
@@ -635,7 +639,7 @@ class SIPMessage:
                 if value is not None:
                     if attribute == "rtpmap":
                         # a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>] # noqa: E501
-                        v = re.split(" |/", value)
+                        v = regex.SDP_A_SPLIT.split(value)
                         for t in self.body["m"]:
                             if v[0] in t["methods"]:
                                 index = int(self.body["m"].index(t))

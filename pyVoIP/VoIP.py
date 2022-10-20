@@ -466,6 +466,7 @@ class VoIPPhone:
                 self._callback_RESP_NotFound(request)
             elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
                 self._callback_RESP_Unavailable(request)
+        return None  # mypy needs this for some reason.
 
     def get_status(self) -> PhoneStatus:
         return self._status

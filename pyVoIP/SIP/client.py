@@ -37,7 +37,7 @@ class SIPClient:
         password: str,
         bind_ip="0.0.0.0",
         bind_port=5060,
-        call_callback: Optional[Callable[[SIPMessage], None]] = None,
+        call_callback: Optional[Callable[[SIPMessage], Optional[str]]] = None,
         transport_mode: TransportMode = TransportMode.UDP,
     ):
         self.NSD = False
@@ -164,7 +164,7 @@ class SIPClient:
             self.out.sendto(response.encode("utf8"), (self.server, self.port))
         elif message.method == "OPTIONS":
             if self.call_callback:
-                response = self.call_callback(message)
+                response = str(self.call_callback(message))
             else:
                 response = self._gen_options_response(message)
             self.out.sendto(response.encode("utf8"), (self.server, self.port))
