@@ -13,6 +13,18 @@ there has sometimes been jittering, setting this to 0.75 fixed this in testing.
 """
 TRANSMIT_DELAY_REDUCTION = 0.0
 
+"""
+Basic authentication is deprecated as it will send your password in plain-text,
+likely in the clear (unencrypted) as well. As such this is disabled be default.
+"""
+ALLOW_BASIC_AUTH = False
+
+"""
+MD5 Digest authentication is deprecated as it a weak hash. However, it is still
+used often so it is enabled by default.
+"""
+ALLOW_MD5_AUTH = True
+
 
 def debug(s, e=None):
     if DEBUG:

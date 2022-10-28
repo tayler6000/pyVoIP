@@ -1,5 +1,7 @@
+from base64 import b16encode
 from threading import Timer, Lock
 from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from pyVoIP.credentials import CredentialsManager
 from pyVoIP.SIP.message import (
     SIPMessage,
     SIPStatus,
@@ -33,8 +35,8 @@ class SIPClient:
         self,
         server: str,
         port: int,
-        username: str,
-        password: str,
+        user: str,
+        credentials_manager: CredentialsManager,
         bind_ip="0.0.0.0",
         bind_port=5060,
         call_callback: Optional[Callable[[SIPMessage], Optional[str]]] = None,
@@ -45,8 +47,8 @@ class SIPClient:
         self.port = port
         self.bind_ip = bind_ip
         self.bind_port = bind_port
-        self.username = username
-        self.password = password
+        self.user = user
+        self.credentials_manager = credentials_manager
         self.transport_mode = transport_mode
 
         self.call_callback = call_callback
@@ -65,6 +67,7 @@ class SIPClient:
         self.sessID = Counter()
 
         self.urnUUID = self.gen_urn_uuid()
+        self.nc: Dict[str, Counter] = {}
 
         self.registerThread: Optional[Timer] = None
         self.recvLock = Lock()
@@ -252,22 +255,134 @@ class SIPClient:
 
         return response
 
-    def gen_authorization(self, request: SIPMessage) -> bytes:
-        realm = request.authentication["realm"]
-        HA1 = self.username + ":" + realm + ":" + self.password
-        HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
-        HA2 = (
-            ""
-            + request.headers["CSeq"]["method"]
-            + ":sip:"
-            + self.server
-            + ";transport=UDP"
-        )
-        HA2 = hashlib.md5(HA2.encode("utf8")).hexdigest()
-        nonce = request.authentication["nonce"]
-        response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
-        response = hashlib.md5(response).hexdigest().encode("utf8")
+    def _hash_md5(self, data: bytes) -> str:
+        """
+        MD5 Hash function.
+        """
+        return hashlib.md5(data).hexdigest()
 
+    def _hash_sha256(self, data: bytes) -> str:
+        """
+        SHA-256 Hash function.
+        """
+        sha256 = hashlib.new("sha256")
+        sha256.update(data)
+        return sha256.hexdigest()
+
+    def _hash_sha512_256(self, data: bytes) -> str:
+        """
+        SHA-512-256 Hash function.
+        """
+        sha512 = hashlib.new("sha512")
+        sha512.update(data)
+        return sha512.hexdigest()[:64]
+
+    def gen_digest(
+        self, request: SIPMessage, body: str = ""
+    ) -> Dict[str, str]:
+        server = request.headers["From"]["host"]
+        realm = request.authentication["realm"]
+        user = request.headers["From"]["user"]
+        credentials = self.credentials_manager.get(server, realm, user)
+        username = credentials["username"]
+        password = credentials["password"]
+        nonce = request.authentication["nonce"]
+        method = request.headers["CSeq"]["method"]
+        uri = f"sip:{self.server};transport={self.transport_mode}"
+        algo = request.authentication.get("algorithm", "md5").lower()
+        if algo in ["sha512-256", "sha512-256-sess"]:
+            hash_func = self._hash_sha512_256
+        elif algo in ["sha256", "sha256-sess"]:
+            hash_func = self._hash_sha256
+        else:
+            hash_func = self._hash_md5
+        # Get new method values
+        qop = request.authentication.get("qop", None).pop(0)
+        opaque = request.authentication.get("opaque", None)
+        userhash = request.authentication.get("userhash", False)
+
+        if qop:
+            # Use new hash method
+            cnonce = uuid.uuid4().hex
+            if nonce not in self.nc:
+                self.nc[nonce] = Counter()
+            nc = str(
+                b16encode(self.nc[nonce].next().to_bytes(4, "big")), "utf8"
+            )
+            HA1 = f"{username}:{realm}:{password}"
+            HA1 = hash_func(HA1.encode("utf8"))
+            if "-sess" in algo:
+                HA1 += f":{nonce}:{cnonce}"
+            HA2 = f"{method}:{uri}"
+            if "auth-int" in qop:
+                HAB = hash_func(body.encode("utf8"))
+                HA2 += ":{HAB}"
+            HA2 = hash_func(HA2.encode("utf8"))
+            HA3 = f"{HA1}:{nonce}:{nc}:{cnonce}:{qop}:{HA2}"
+            if userhash:
+                username = hash_func(f"{username}:{realm}")
+            response = {
+                "realm": realm,
+                "nonce": nonce,
+                "algorithm": algo,
+                "digest": hash_func(HA3.encode("utf8")),
+                "uri": uri,
+                "username": username,
+                "opaque": opaque,
+                "qop": qop,
+                "cnonce": cnonce,
+                "nc": nc,
+                "userhash": userhash,
+            }
+        else:
+            # Use old hash method
+            HA1 = f"{username}:{realm}:{password}"
+            HA1 = hash_func(HA1.encode("utf8"))
+            HA2 = f"{method}:{uri}"
+            HA2 = hash_func(HA2.encode("utf8"))
+            HA3 = f"{HA1}:{nonce}:{HA2}"
+            response = {
+                "realm": realm,
+                "nonce": nonce,
+                "algorithm": algo,
+                "digest": hash_func(HA3.encode("utf8")),
+                "username": username,
+                "opaque": opaque,
+            }
+
+        return response
+
+    def gen_authorization(self, request: SIPMessage, body: str = "") -> str:
+        if request.authentication["method"].lower() == "digest":
+            digest = self.gen_digest(request)
+            response = (
+                f'Authorization: Digest username="{digest["username"]}",'
+                + f'realm="{digest["realm"]}",nonce="{digest["nonce"]}",'
+                + f'uri="{digest["uri"]}",response="{digest["digest"]}",'
+                + f'algorithm={digest["algorithm"]}'
+            )
+            if "qop" in digest:
+                response += (
+                    f',qop={digest["qop"]},'
+                    + f'cnonce="{digest["cnonce"]}",nc={digest["nc"]},'
+                    + f'userhash={str(digest["userhash"]).lower()}'
+                )
+            response += "\r\n"
+        elif request.authentication["method"].lower() == "basic":
+            if not pyVoIP.ALLOW_BASIC_AUTH:
+                raise RuntimeError(
+                    "Basic authentication is not allowed. "
+                    + "Please use pyVoIP.ALLOW_BASIC_AUTH = True to allow it, "
+                    + "but this is not recommended."
+                )
+            server = request.headers["From"]["host"]
+            realm = request.authentication.get("realm", None)
+            credentials = self.credentials_manager.get(server, realm, self.user)
+            username = credentials["username"]
+            password = credentials["password"]
+            userid_pass = f"{username}:{password}".encode("utf8")
+            encoded = str(b64encode(userid_pass), "utf8")
+            response = f"Authorization: Basic {encoded}"
         return response
 
     def gen_branch(self, length=32) -> str:
@@ -287,24 +402,27 @@ class SIPClient:
     def gen_first_request(self, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
-            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};"
+            "Via: SIP/2.0/"
+            + str(self.transport_mode)
+            + f" {self.bind_ip}:{self.bind_port};"
             + f"branch={self.gen_branch()};rport\r\n"
         )
         regRequest += (
-            f'From: "{self.username}" '
-            + f"<sip:{self.username}@{self.server}>;tag="
+            f'From: "{self.user}" '
+            + f"<sip:{self.user}@{self.server}>;tag="
             + f'{self.tagLibrary["register"]}\r\n'
         )
         regRequest += (
-            f'To: "{self.username}" '
-            + f"<sip:{self.username}@{self.server}>\r\n"
+            f'To: "{self.user}" ' + f"<sip:{self.user}@{self.server}>\r\n"
         )
         regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
-            + "transport=UDP>;+sip.instance="
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
+            + "transport="
+            + str(self.transport_mode)
+            + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
@@ -322,24 +440,28 @@ class SIPClient:
         return regRequest
 
     def gen_subscribe(self, response: SIPMessage) -> str:
-        subRequest = f"SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n"
+        subRequest = f"SUBSCRIBE sip:{self.user}@{self.server} SIP/2.0\r\n"
         subRequest += (
-            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};"
+            "Via: SIP/2.0/"
+            + str(self.transport_mode)
+            + f" {self.bind_ip}:{self.bind_port};"
             + f"branch={self.gen_branch()};rport\r\n"
         )
         subRequest += (
-            f'From: "{self.username}" '
-            + f"<sip:{self.username}@{self.server}>;tag="
+            f'From: "{self.user}" '
+            + f"<sip:{self.user}@{self.server}>;tag="
             + f"{self.gen_tag()}\r\n"
         )
-        subRequest += f"To: <sip:{self.username}@{self.server}>\r\n"
+        subRequest += f"To: <sip:{self.user}@{self.server}>\r\n"
         subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
         subRequest += f"CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n"
         # TODO: check if transport is needed
         subRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
-            + "transport=UDP>;+sip.instance="
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
+            + "transport="
+            + str(self.transport_mode)
+            + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
         subRequest += "Max-Forwards: 70\r\n"
@@ -353,30 +475,32 @@ class SIPClient:
         return subRequest
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
-        response = str(self.gen_authorization(request), "utf8")
         nonce = request.authentication["nonce"]
         realm = request.authentication["realm"]
 
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
-            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
+            "Via: SIP/2.0/"
+            + str(self.transport_mode)
+            + f" {self.bind_ip}:{self.bind_port};branch="
             + f"{self.gen_branch()};rport\r\n"
         )
         regRequest += (
-            f'From: "{self.username}" '
-            + f"<sip:{self.username}@{self.server}>;tag="
+            f'From: "{self.user}" '
+            + f"<sip:{self.user}@{self.server}>;tag="
             + f'{self.tagLibrary["register"]}\r\n'
         )
         regRequest += (
-            f'To: "{self.username}" '
-            + f"<sip:{self.username}@{self.server}>\r\n"
+            f'To: "{self.user}" ' + f"<sip:{self.user}@{self.server}>\r\n"
         )
         regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port};"
-            + "transport=UDP>;+sip.instance="
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
+            + "transport="
+            + str(self.transport_mode)
+            + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
@@ -387,12 +511,7 @@ class SIPClient:
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
-        regRequest += (
-            f'Authorization: Digest username="{self.username}",'
-            + f'realm="{realm}",nonce="{nonce}",'
-            + f'uri="sip:{self.server};transport=UDP",'
-            + f'response="{response}",algorithm=MD5\r\n'
-        )
+        regRequest += self.gen_authorization(request)
         regRequest += "Content-Length: 0"
         regRequest += "\r\n\r\n"
 
@@ -509,7 +628,7 @@ class SIPClient:
         )
         regRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         # TODO: Add Supported
         regRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
@@ -558,18 +677,18 @@ class SIPClient:
 
         invRequest = f"INVITE sip:{number}@{self.server} SIP/2.0\r\n"
         invRequest += (
-            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
+            f"Via: SIP/2.0/"
+            + str(self.transport_mode)
+            + f" {self.bind_ip}:{self.bind_port};branch="
             + f"{branch}\r\n"
         )
         invRequest += "Max-Forwards: 70\r\n"
         invRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         invRequest += f"To: <sip:{number}@{self.server}>\r\n"
-        invRequest += (
-            f"From: <sip:{self.username}@{self.bind_ip}>;tag={tag}\r\n"
-        )
+        invRequest += f"From: <sip:{self.user}@{self.bind_ip}>;tag={tag}\r\n"
         invRequest += f"Call-ID: {call_id}\r\n"
         invRequest += f"CSeq: {self.inviteCounter.next()} INVITE\r\n"
         invRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -600,7 +719,7 @@ class SIPClient:
         byeRequest += f"CSeq: {cseq} BYE\r\n"
         byeRequest += (
             "Contact: "
-            + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
+            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
         byeRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         byeRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -634,7 +753,9 @@ class SIPClient:
         via = ""
         for h_via in request.headers["Via"]:
             v_line = (
-                "Via: SIP/2.0/UDP "
+                "Via: SIP/2.0/"
+                + str(self.transport_mode)
+                + " "
                 + f'{h_via["address"][0]}:{h_via["address"][1]}'
             )
             if "branch" in h_via.keys():
@@ -685,15 +806,7 @@ class SIPClient:
         ack = self.gen_ack(response)
         self.out.sendto(ack.encode("utf8"), (self.server, self.port))
         debug("Acknowledged")
-        authhash = self.gen_authorization(response)
-        nonce = response.authentication["nonce"]
-        realm = response.authentication["realm"]
-        auth = (
-            f'Authorization: Digest username="{self.username}",realm='
-            + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
-            + f'transport=UDP",response="{str(authhash, "utf8")}",'
-            + "algorithm=MD5\r\n"
-        )
+        auth = self.gen_authorization(response)
 
         invite = self.gen_invite(
             number, str(sess_id), ms, sendtype, branch, call_id

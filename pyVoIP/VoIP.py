@@ -1,5 +1,6 @@
 from enum import Enum
 from pyVoIP import SIP, RTP, sock
+from pyVoIP.credentials import CredentialsManager
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional
 import audioop
@@ -399,8 +400,8 @@ class VoIPPhone:
         self,
         server: str,
         port: int,
-        username: str,
-        password: str,
+        user: str,
+        credentials_manager: CredentialsManager,
         bind_ip="0.0.0.0",
         bind_port=5060,
         transport_mode=sock.TransportMode.UDP,
@@ -424,8 +425,8 @@ class VoIPPhone:
         self.server = server
         self.port = port
         self.bind_ip = bind_ip
-        self.username = username
-        self.password = password
+        self.user = user
+        self.credentials_manager = credentials_manager
         self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
         self.transport_mode = transport_mode
@@ -441,8 +442,8 @@ class VoIPPhone:
         self.sip = SIP.SIPClient(
             server,
             port,
-            username,
-            password,
+            user,
+            credentials_manager,
             bind_ip=self.bind_ip,
             bind_port=bind_port,
             call_callback=self.callback,

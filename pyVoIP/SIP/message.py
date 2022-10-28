@@ -437,10 +437,22 @@ class SIPMessage:
         elif header == "Content-Length":
             self.headers[header] = int(data)
         elif header == "WWW-Authenticate" or header == "Authorization":
-            data = data.replace("Digest ", "")
+            method = data.split(" ")[0]
+            data = data.replace(f"{method} ", "")
             row_data = self.auth_match.findall(data)
-            header_data = {}
+            header_data = {"method": method}
             for var, data in row_data:
+                if var == "userhash":
+                    header_data[var] = (
+                        False if data.strip('"').lower() == "false" else True
+                    )
+                    continue
+                if var == "qop":
+                    authorized = data.strip('"').split(",")
+                    for i, value in enumerate(authorized):
+                        authorized[i] = value.strip()
+                    header_data[var] = authorized
+                    continue
                 header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
