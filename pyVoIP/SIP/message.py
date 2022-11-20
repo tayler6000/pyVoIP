@@ -372,7 +372,9 @@ class SIPMessage:
                 If no port is provided in via header assume default port.
                 Needs to be str. Check response build for better str creation
                 """
-                _port = info[1].split(":")[1] if len(_address) > 1 else "5060"
+                _port = (
+                    int(info[1].split(":")[1]) if len(_address) > 1 else 5060
+                )
                 _via = {"type": _type, "address": (_ip, _port)}
 
                 """
@@ -385,13 +387,16 @@ class SIPMessage:
                     else:
                         _via[x] = None
                 self.headers["Via"].append(_via)
-        elif header in ["From", "To"]:
+        elif header in ["From", "To", "Contact"]:
             info = data.split(";tag=")
             tag = ""
             if len(info) >= 2:
                 tag = info[1]
             raw = data
             reg = regex.TO_FROM_MATCH
+            direct = "@" not in data
+            if direct:
+                reg = regex.TO_FROM_DIRECT_MATCH
             match = reg.match(data)
             if type(match) != regex.Match:
                 raise SIPParseError(
@@ -402,7 +407,12 @@ class SIPMessage:
                     + f"{data=} {type(match)=}"
                 )
             matches = match.groupdict()
+            if direct:
+                matches["user"] = ""
+                matches["password"] = ""
             uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
+            if direct:
+                uri = f'{matches["uri_type"]}:{matches["host"]}'
             if matches["port"]:
                 uri += matches["port"]
             uri_type = matches["uri_type"]

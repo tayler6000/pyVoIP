@@ -135,7 +135,7 @@ class SIPClient:
             if self.call_callback is None:
                 request = self.gen_busy(message)
                 self.out.sendto(
-                    request.encode("utf8"), (self.server, self.port)
+                    request.encode("utf8"), message.headers["Via"]["address"]
                 )
             else:
                 self.call_callback(message)
@@ -156,7 +156,7 @@ class SIPClient:
             except Exception:
                 debug("BYE Answer failed falling back to server as target")
                 self.out.sendto(
-                    response.encode("utf8"), (self.server, self.port)
+                    response.encode("utf8"), message.headers["Via"]["address"]
                 )
         elif message.method == "ACK":
             return
@@ -164,13 +164,17 @@ class SIPClient:
             # TODO: If callCallback is None, the call doesn't exist, 481
             self.call_callback(message)  # type: ignore
             response = self.gen_ok(message)
-            self.out.sendto(response.encode("utf8"), (self.server, self.port))
+            self.out.sendto(
+                response.encode("utf8"), message.headers["Via"]["address"]
+            )
         elif message.method == "OPTIONS":
             if self.call_callback:
                 response = str(self.call_callback(message))
             else:
                 response = self._gen_options_response(message)
-            self.out.sendto(response.encode("utf8"), (self.server, self.port))
+            self.out.sendto(
+                response.encode("utf8"), message.headers["Via"]["address"]
+            )
         else:
             debug("TODO: Add 400 Error on non processable request")
 
@@ -240,15 +244,14 @@ class SIPClient:
         to = request.headers["To"]
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
         response += (
-            f'To: {display_name}<{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
+            f'To: {display_name}<{to["uri"]}>;tag=' + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
             f"CSeq: {request.headers['CSeq']['check']} "
             + f"{request.headers['CSeq']['method']}\r\n"
         )
-        response += f"Contact: {request.headers['Contact']}\r\n"
+        response += f"Contact: {request.headers['Contact']['raw']}\r\n"
         response += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         response += 'Warning: 399 GS "Unable to accept call"\r\n'
         response += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -527,15 +530,14 @@ class SIPClient:
         to = request.headers["To"]
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
         response += (
-            f'To: {display_name}<{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
+            f'To: {display_name}<{to["uri"]}>;tag=' + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
             f"CSeq: {request.headers['CSeq']['check']} "
             + f"{request.headers['CSeq']['method']}\r\n"
         )
-        response += f"Contact: {request.headers['Contact']}\r\n"
+        response += f"Contact: {request.headers['Contact']['raw']}\r\n"
         # TODO: Add Supported
         response += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         response += 'Warning: 399 GS "Unable to accept call"\r\n'
@@ -551,8 +553,7 @@ class SIPClient:
         to = request.headers["To"]
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
         okResponse += (
-            f'To: {display_name}<{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
+            f'To: {display_name}<{to["uri"]}>;tag=' + f"{self.gen_tag()}\r\n"
         )
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
         okResponse += (
@@ -578,7 +579,7 @@ class SIPClient:
             f"CSeq: {request.headers['CSeq']['check']} "
             + f"{request.headers['CSeq']['method']}\r\n"
         )
-        regRequest += f"Contact: {request.headers['Contact']}\r\n"
+        regRequest += f"Contact: {request.headers['Contact']['raw']}\r\n"
         # TODO: Add Supported
         regRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         regRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -708,11 +709,13 @@ class SIPClient:
 
     def gen_bye(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
-        c = request.headers["Contact"].strip("<").strip(">")
+        c = request.headers["Contact"]["uri"]
         byeRequest = f"BYE {c} SIP/2.0\r\n"
         byeRequest += self._gen_response_via_header(request)
         _from = request.headers["From"]
-        display_name = f'"{_from["display-name"]}" ' if _from["display-name"] else ""
+        display_name = (
+            f'"{_from["display-name"]}" ' if _from["display-name"] else ""
+        )
         fromH = f'{display_name}<{_from["uri"]}>'
         to = request.headers["To"]
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
@@ -746,10 +749,10 @@ class SIPClient:
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
         ackMessage += f'To: {display_name}<{to["uri"]}>;tag={to["tag"]}\r\n'
         _from = request.headers["From"]
-        display_name = f'"{_from["display-name"]}" ' if _from["display-name"] else ""
-        ackMessage += (
-            f'From: {display_name}<{_from["uri"]}>;tag={tag}\r\n'
+        display_name = (
+            f'"{_from["display-name"]}" ' if _from["display-name"] else ""
         )
+        ackMessage += f'From: {display_name}<{_from["uri"]}>;tag={tag}\r\n'
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
         ackMessage += f"CSeq: {request.headers['CSeq']['check']} ACK\r\n"
         ackMessage += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
@@ -835,7 +838,13 @@ class SIPClient:
     def bye(self, request: SIPMessage) -> None:
         message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
-        self.out.sendto(message.encode("utf8"), (self.server, self.port))
+        self.out.sendto(
+            message.encode("utf8"),
+            (
+                request.headers["Contact"]["host"],
+                request.headers["Contact"]["port"],
+            ),
+        )
 
     def deregister(self) -> bool:
         self.recvLock.acquire()

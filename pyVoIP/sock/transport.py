@@ -3,6 +3,7 @@ from typing import Optional
 import socket
 import ssl
 
+
 class TransportMode(Enum):
     def __new__(
         cls,
