@@ -625,7 +625,7 @@ class SIPClient:
 
         regRequest = "SIP/2.0 200 OK\r\n"
         regRequest += self._gen_response_via_header(request)
-        regRequest += f"From: {request.headers['From']['raw']}"
+        regRequest += f"From: {request.headers['From']['raw']}\r\n"
         to = request.headers["To"]
         display_name = f'"{to["display-name"]}" ' if to["display-name"] else ""
         regRequest += f'To: {display_name}<{to["uri"]}>;tag={tag}\r\n'
