@@ -1,68 +1,10 @@
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
+from pyVoIP.sock.transport import TransportMode
 import socket
 import warnings
-
-try:
-    import ssl
-
-    SSL_SUPPORTED = True
-except Exception:
-    SSL_SUPPORTED = False
-    warnings.warn(
-        "SSL/TLS is not available, do you have OpenSSL installed?",
-        RuntimeWarning,
-    )
-
-
-class TransportMode(Enum):
-    def __new__(
-        cls,
-        value: str,
-        socket_type: socket.SocketKind,
-        tls_mode: Optional[int],
-    ):
-        global SSL_SUPPORTED
-        obj = object.__new__(cls)
-        if value == "TLS" and SSL_SUPPORTED is False:
-            """
-            This should cause an error if someone tries to use TLS without
-            OpenSSL, but has a potential benifit of self correcting if OpenSSL
-            somehow becomes available later, though I don't think that's possible.
-            """
-            import ssl
-
-            SSL_SUPPORTED = True
-        obj._value_ = value
-        obj.socket_type = socket_type
-        obj.tls_mode = tls_mode
-
-        return obj
-
-    @property
-    def socket_type(self) -> socket.SocketKind:
-        return self._socket_type
-
-    @socket_type.setter
-    def socket_type(self, value: socket.SocketKind) -> None:
-        self._socket_type = value
-
-    @property
-    def tls_mode(self) -> Optional[int]:
-        return self._tls_mode
-
-    @tls_mode.setter
-    def tls_mode(self, value: Optional[int]) -> None:
-        self._tls_mode = value
-
-    def __str__(self) -> str:
-        return self._value_
-
-    UDP = ("UDP", socket.SOCK_DGRAM, None)
-    TCP = ("TCP", socket.SOCK_STREAM, None)
-    if SSL_SUPPORTED:
-        TLS = ("TLS", socket.SOCK_STREAM, ssl.PROTOCOL_TLS)
+import ssl
 
 
 class VoIPSocket:

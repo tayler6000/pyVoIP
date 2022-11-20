@@ -32,5 +32,5 @@ setup(
     ],
     packages=find_packages(exclude=("tests",)),
     package_data={"pyVoIP": ["py.typed"]},
-    python_requires=">=3.6",
+    python_requires=">=3.8",
 )

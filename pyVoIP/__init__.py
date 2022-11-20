@@ -25,6 +25,13 @@ used often so it is enabled by default.
 """
 ALLOW_MD5_AUTH = True
 
+"""
+If this is set to True TLS will fall back to TCP if the TLS handshake fails.
+This is off by default, as it would be irresponsible to have a security feature
+disabled by default.
+"""
+ALLOW_TLS_FALLBACK = False
+
 
 def debug(s, e=None):
     if DEBUG:

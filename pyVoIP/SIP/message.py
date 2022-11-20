@@ -1,7 +1,7 @@
 from enum import Enum, IntEnum
 from pyVoIP import regex
 from pyVoIP.SIP.error import SIPParseError
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 import pyVoIP
 
 
@@ -293,7 +293,7 @@ class SIPMessage:
         self.status = SIPStatus(491)
         self.headers: Dict[str, Any] = {"Via": []}
         self.body: Dict[str, Any] = {}
-        self.authentication: Dict[str, str] = {}
+        self.authentication: Dict[str, Union[str, List[str]]] = {}
         self.raw = data
         self.auth_match = regex.AUTH_MATCH
 
@@ -346,13 +346,15 @@ class SIPMessage:
         if check in self.SIPCompatibleVersions:
             self.type = SIPMessageType.RESPONSE
             self.parse_sip_response(data)
-        elif check in self.SIPCompatibleMethods:
+        else:  # elif check in self.SIPCompatibleMethods:
             self.type = SIPMessageType.MESSAGE
             self.parse_sip_message(data)
+        """
         else:
             raise SIPParseError(
                 "Unable to decipher SIP request: " + str(heading, "utf8")
             )
+        """
 
     def parse_header(self, header: str, data: str) -> None:
 
@@ -392,12 +394,12 @@ class SIPMessage:
             reg = regex.TO_FROM_MATCH
             match = reg.match(data)
             if type(match) != regex.Match:
-                raise SIPParseMessage(
+                raise SIPParseError(
                     "Regex failed to match To/From.\n\n"
                     + "Please open a GitHub Issue at "
                     + "https://www.github.com/tayler6000/pyVoIP "
                     + "and include the following:\n\n"
-                    + f"{data=}"
+                    + f"{data=} {type(match)=}"
                 )
             matches = match.groupdict()
             uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
@@ -440,7 +442,7 @@ class SIPMessage:
             method = data.split(" ")[0]
             data = data.replace(f"{method} ", "")
             row_data = self.auth_match.findall(data)
-            header_data = {"method": method}
+            header_data: Dict[str, Any] = {"method": method}
             for var, data in row_data:
                 if var == "userhash":
                     header_data[var] = (
