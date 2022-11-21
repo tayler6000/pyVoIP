@@ -617,10 +617,29 @@ class VoIPPhone:
         self.sip.stop()
         self._status = PhoneStatus.INACTIVE
 
-    def call(self, number: str) -> VoIPCall:
+    def call(
+        self,
+        number: str,
+        payload_types: Optional[List[RTP.PayloadType]] = None,
+    ) -> VoIPCall:
         port = self.request_port()
         medias = {}
-        medias[port] = {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}
+        if not payload_types:
+            payload_type = [RTP.PayloadType.PCMU, RTP.PayloadType.EVENT]
+        medias[port] = {}
+        dynamic_int = 101
+        for pt in payload_types:
+            if pt not in pyVoIP.RTPCompatibleCodecs:
+                raise RuntimeError(
+                    "Unable to make call!\n\n"
+                    + f"{pt} is not supported by pyVoIP {pyVoIP.__version__}"
+                )
+            try:
+                medias[port][int(pt)] = pt
+            except RTP.DynamicPayloadType:
+                medias[port][dynamic_int] = pt
+                dynamic_int += 1
+        debug(f"Making call with {medias=}")
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )

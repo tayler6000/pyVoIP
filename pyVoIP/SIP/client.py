@@ -651,7 +651,7 @@ class SIPClient:
         self,
         number: str,
         sess_id: str,
-        ms: Dict[int, Dict[str, "RTP.PayloadType"]],
+        ms: Dict[int, Dict[int, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
         branch: str,
         call_id: str,
@@ -788,7 +788,7 @@ class SIPClient:
     def invite(
         self,
         number: str,
-        ms: Dict[int, Dict[str, "RTP.PayloadType"]],
+        ms: Dict[int, Dict[int, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
     ) -> Tuple[SIPMessage, str, int]:
         branch = "z9hG4bK" + self.gen_call_id()[0:25]
