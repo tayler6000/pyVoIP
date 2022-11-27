@@ -371,6 +371,9 @@ class SIPClient:
                     + f'cnonce="{digest["cnonce"]}",nc={digest["nc"]},'
                     + f'userhash={str(digest["userhash"]).lower()}'
                 )
+            if "opaque" in digest:
+                if digest["opaque"]:
+                    response += f',opaque="{digest["opaque"]}"'
             response += "\r\n"
         elif request.authentication["method"].lower() == "basic":
             if not pyVoIP.ALLOW_BASIC_AUTH:
@@ -481,9 +484,6 @@ class SIPClient:
         return subRequest
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
-        nonce = request.authentication["nonce"]
-        realm = request.authentication["realm"]
-
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
             "Via: SIP/2.0/"
