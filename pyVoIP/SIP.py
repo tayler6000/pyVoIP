@@ -1602,6 +1602,7 @@ class SIPClient:
         if response.status == SIPStatus(100) or response.status == SIPStatus(
             180
         ):
+            self.recvLock.release()
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
         debug(f"Received Response: {response.summary()}")
         ack = self.genAck(response)
