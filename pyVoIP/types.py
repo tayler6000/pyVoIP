@@ -1,11 +1,10 @@
-from typing import Callable, Dict, Optional, Union, TYPE_CHECKING
+from typing import Callable, Dict, Optional, Union
 import socket
 import ssl
 
-if TYPE_CHECKING:
-    from pyVoIP.sock import VoIPSocket
 
-SOCKETS = Union["VoIPSocket", socket.socket, ssl.SSLSocket]
+SOCKETS = Union[socket.socket, ssl.SSLSocket]
+
 
 KEY_PASSWORD = Optional[
     Union[
@@ -17,6 +16,7 @@ KEY_PASSWORD = Optional[
         Callable[[], str],
     ]
 ]
+
 
 CREDENTIALS_DICT = Dict[
     Optional[str],  # Server or None if default

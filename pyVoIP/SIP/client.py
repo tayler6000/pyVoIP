@@ -1,4 +1,4 @@
-from base64 import b16encode
+from base64 import b16encode, b64encode
 from threading import Timer, Lock
 from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from pyVoIP.credentials import CredentialsManager
@@ -11,7 +11,7 @@ from pyVoIP.SIP.error import (
     SIPParseError,
     InvalidAccountInfoError,
 )
-from pyVoIP.sock import TransportMode
+from pyVoIP.sock.transport import TransportMode
 from pyVoIP.helpers import Counter
 import pyVoIP
 import hashlib
@@ -320,7 +320,7 @@ class SIPClient:
             HA2 = f"{method}:{uri}"
             if "auth-int" in qop:
                 HAB = hash_func(body.encode("utf8"))
-                HA2 += ":{HAB}"
+                HA2 += f":{HAB}"
             HA2 = hash_func(HA2.encode("utf8"))
             HA3 = f"{HA1}:{nonce}:{nc}:{cnonce}:{qop}:{HA2}"
             if userhash:
@@ -391,7 +391,7 @@ class SIPClient:
             password = credentials["password"]
             userid_pass = f"{username}:{password}".encode("utf8")
             encoded = str(b64encode(userid_pass), "utf8")
-            response = f"Authorization: Basic {encoded}"
+            response = f"Authorization: Basic {encoded}\r\n"
         return response
 
     def gen_branch(self, length=32) -> str:
@@ -686,7 +686,7 @@ class SIPClient:
 
         invRequest = f"INVITE sip:{number}@{self.server} SIP/2.0\r\n"
         invRequest += (
-            f"Via: SIP/2.0/"
+            "Via: SIP/2.0/"
             + str(self.transport_mode)
             + f" {self.bind_ip}:{self.bind_port};branch="
             + f"{branch}\r\n"
@@ -840,6 +840,7 @@ class SIPClient:
     def bye(self, request: SIPMessage) -> None:
         message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
+        self.recvLock.acquire()
         self.out.sendto(
             message.encode("utf8"),
             (
@@ -847,6 +848,25 @@ class SIPClient:
                 request.headers["Contact"]["port"],
             ),
         )
+        response = SIPMessage(self.s.recv(8192))
+        if response.status == SIPStatus(401):
+            #  Requires password
+            auth = self.gen_authorization(response)
+            message = message.replace(
+                "\r\nContent-Length", f"\r\n{auth}Content-Length"
+            )
+            # TODO: Handle bye to server vs. bye to connected client
+            self.out.sendto(
+                message.encode("utf8"),
+                (
+                    request.headers["Contact"]["host"],
+                    request.headers["Contact"]["port"],
+                ),
+            )
+        else:
+            debug("Received not a 401 on bye:")
+            debug(response.summary())
+        self.recvLock.release()
 
     def deregister(self) -> bool:
         self.recvLock.acquire()
