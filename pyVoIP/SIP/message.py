@@ -580,7 +580,7 @@ class SIPClient:
         )
         # TODO: Add Supported
         reg_request += f"Contact: {request.headers['Contact']['raw']}\r\n" \
-                       f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n" \  
+                       f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n" \
                        f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n" \
                        f"Content-Length: 0\r\n\r\n"
 
