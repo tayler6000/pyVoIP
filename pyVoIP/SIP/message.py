@@ -245,26 +245,30 @@ class SIPClient:
         return f'"{_from["display-name"]}" ' if _from["display-name"] else ""
 
     def gen_allow(self) -> str:
-        return f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n' \
-               f'Max-Forwards: 70\r\n' \
-               f'Allow-Events: org.3gpp.nwinitdereg\r\n' \
-               f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n'
+        return (
+            f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
+            f"Max-Forwards: 70\r\n"
+            f"Allow-Events: org.3gpp.nwinitdereg\r\n"
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+        )
 
     def gen_sip_version_not_supported(self, request: SIPMessage) -> str:
         # TODO: Add Supported
-        response = f'SIP/2.0 505 SIP Version Not Supported\r\n' \
-                   f'{self._gen_response_via_header(request)}' \
-                   f'From: {request.headers["From"]["raw"]}\r\n' \
-                   f'To: {self.gen_to_for_response(request)}' \
-                   f'<{request.headers["To"]["uri"]}>;tag={self.gen_tag()}\r\n' \
-                   f'Call-ID: {request.headers["Call-ID"]}\r\n' \
-                   f'CSeq: {request.headers["CSeq"]["check"]} ' \
-                   f'{request.headers["CSeq"]["method"]}\r\n' \
-                   f'Contact: {request.headers["Contact"]["raw"]}\r\n' \
-                   f'f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n' \
-                   f'Warning: 399 GS "Unable to accept call"\r\n' \
-                   f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n' \
-                   f'Content-Length: 0\r\n\r\n'
+        response = (
+            f"SIP/2.0 505 SIP Version Not Supported\r\n"
+            f"{self._gen_response_via_header(request)}"
+            f'From: {request.headers["From"]["raw"]}\r\n'
+            f"To: {self.gen_to_for_response(request)}"
+            f'<{request.headers["To"]["uri"]}>;tag={self.gen_tag()}\r\n'
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+            f'CSeq: {request.headers["CSeq"]["check"]} '
+            f'{request.headers["CSeq"]["method"]}\r\n'
+            f'Contact: {request.headers["Contact"]["raw"]}\r\n'
+            f'f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n'
+            f'Warning: 399 GS "Unable to accept call"\r\n'
+            f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
+            f"Content-Length: 0\r\n\r\n"
+        )
 
         return response
 
@@ -433,8 +437,10 @@ class SIPClient:
         reg_request += (
             f'To: "{self.user}" ' + f"<sip:{self.user}@{self.server}>\r\n"
         )
-        reg_request += f"Call-ID: {self.gen_call_id()}\r\n" \
-                       f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
+        reg_request += (
+            f"Call-ID: {self.gen_call_id()}\r\n"
+            f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
+        )
         reg_request += (
             "Contact: "
             + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
@@ -443,14 +449,13 @@ class SIPClient:
             + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
-        reg_request += f'{self.gen_allow()}'
+        reg_request += f"{self.gen_allow()}"
         # Supported: 100rel, replaces, from-change, gruu
         reg_request += (
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
-        reg_request += "Content-Length: 0" \
-                       "\r\n\r\n"
+        reg_request += "Content-Length: 0" "\r\n\r\n"
 
         return reg_request
 
@@ -467,9 +472,11 @@ class SIPClient:
             + f"<sip:{self.user}@{self.server}>;tag="
             + f"{self.gen_tag()}\r\n"
         )
-        sub_request += f'To: <sip:{self.user}@{self.server}>\r\n' \
-                       f'Call-ID: {response.headers["Call-ID"]}\r\n' \
-                       f'CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n'
+        sub_request += (
+            f"To: <sip:{self.user}@{self.server}>\r\n"
+            f'Call-ID: {response.headers["Call-ID"]}\r\n'
+            f"CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n"
+        )
         # TODO: check if transport is needed
         sub_request += (
             "Contact: "
@@ -479,13 +486,15 @@ class SIPClient:
             + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
-        sub_request += f'Max-Forwards: 70\r\n' \
-                       f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' \
-                       f'Expires: {self.default_expires * 2}\r\n' \
-                       f'Event: message-summary\r\n' \
-                       f'Accept: application/simple-message-summary' \
-                       f'Content-Length: 0' \
-                       f'\r\n\r\n'
+        sub_request += (
+            f"Max-Forwards: 70\r\n"
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+            f"Expires: {self.default_expires * 2}\r\n"
+            f"Event: message-summary\r\n"
+            f"Accept: application/simple-message-summary"
+            f"Content-Length: 0"
+            f"\r\n\r\n"
+        )
 
         return sub_request
 
@@ -506,8 +515,10 @@ class SIPClient:
             f'To: "{self.user}" ' + f"<sip:{self.user}@{self.server}>\r\n"
         )
         call_id = request.headers.get("Call-ID", self.gen_call_id())
-        reg_request += f'Call-ID: {call_id}\r\n' \
-                       f'CSeq: {self.registerCounter.next()} REGISTER\r\n'
+        reg_request += (
+            f"Call-ID: {call_id}\r\n"
+            f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
+        )
         reg_request += (
             "Contact: "
             + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
@@ -516,14 +527,16 @@ class SIPClient:
             + ">;+sip.instance="
             + f'"<urn:uuid:{self.urnUUID}>"\r\n'
         )
-        reg_request += f'{self.gen_allow()}'
+        reg_request += f"{self.gen_allow()}"
         reg_request += (
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
-        reg_request += f'{self.gen_authorization(request)}' \
-                       f'Content-Length: 0' \
-                       f'\r\n\r\n'
+        reg_request += (
+            f"{self.gen_authorization(request)}"
+            f"Content-Length: 0"
+            f"\r\n\r\n"
+        )
 
         return reg_request
 
@@ -532,7 +545,7 @@ class SIPClient:
         response += self._gen_response_via_header(request)
         response += f"From: {request.headers['From']['raw']}\r\n"
         response += (
-            f'To: {self.gen_to_for_response(request)}'
+            f"To: {self.gen_to_for_response(request)}"
             f'<{request.headers["To"]["uri"]}>;tag=' + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
@@ -550,39 +563,47 @@ class SIPClient:
         return response
 
     def gen_ok(self, request: SIPMessage) -> str:
-        ok_response = f'SIP/2.0 200 OK\r\n' \
-                      f'{self._gen_response_via_header(request)}' \
-                      f'From: {request.headers["From"]["raw"]}\r\n' \
-                      f'To: {self.gen_to_for_response(request)}' \
-                      f'<{request.headers["To"]["uri"]}>;tag={self.gen_tag()}\r\n' \
-                      f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        ok_response = (
+            f"SIP/2.0 200 OK\r\n"
+            f"{self._gen_response_via_header(request)}"
+            f'From: {request.headers["From"]["raw"]}\r\n'
+            f"To: {self.gen_to_for_response(request)}"
+            f'<{request.headers["To"]["uri"]}>;tag={self.gen_tag()}\r\n'
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        )
         ok_response += (
             f"CSeq: {request.headers['CSeq']['check']} "
             + f"{request.headers['CSeq']['method']}\r\n"
         )
-        ok_response += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n" \
-                       f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n" \
-                       f"Content-Length: 0\r\n\r\n"
+        ok_response += (
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+            f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+            f"Content-Length: 0\r\n\r\n"
+        )
 
         return ok_response
 
     def gen_ringing(self, request: SIPMessage) -> str:
         tag = self.gen_tag()
-        reg_request = f'SIP/2.0 180 Ringing\r\n' \
-                      f'{self._gen_response_via_header(request)}' \
-                      f'From: {request.headers["From"]["raw"]}\r\n' \
-                      f'To: {self.gen_to_for_response(request)}' \
-                      f'<{request.headers["To"]["uri"]}>;tag={tag}\r\n' \
-                      f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        reg_request = (
+            f"SIP/2.0 180 Ringing\r\n"
+            f"{self._gen_response_via_header(request)}"
+            f'From: {request.headers["From"]["raw"]}\r\n'
+            f"To: {self.gen_to_for_response(request)}"
+            f'<{request.headers["To"]["uri"]}>;tag={tag}\r\n'
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        )
         reg_request += (
             f"CSeq: {request.headers['CSeq']['check']} "
             f"{request.headers['CSeq']['method']}\r\n"
         )
         # TODO: Add Supported
-        reg_request += f"Contact: {request.headers['Contact']['raw']}\r\n" \
-                       f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n" \
-                       f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n" \
-                       f"Content-Length: 0\r\n\r\n"
+        reg_request += (
+            f"Contact: {request.headers['Contact']['raw']}\r\n"
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+            f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+            f"Content-Length: 0\r\n\r\n"
+        )
 
         self.tagLibrary[request.headers["Call-ID"]] = tag
 
@@ -622,20 +643,24 @@ class SIPClient:
 
         tag = self.tagLibrary[request.headers["Call-ID"]]
 
-        reg_request = f'SIP/2.0 200 OK\r\n' \
-                      f'{self._gen_response_via_header(request)}' \
-                      f'From: {request.headers["From"]["raw"]}\r\n' \
-                      f'To: {self.gen_to_for_response(request)}' \
-                      f'<{request.headers["To"]["uri"]}>;tag={tag}\r\n' \
-                      f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        reg_request = (
+            f"SIP/2.0 200 OK\r\n"
+            f"{self._gen_response_via_header(request)}"
+            f'From: {request.headers["From"]["raw"]}\r\n'
+            f"To: {self.gen_to_for_response(request)}"
+            f'<{request.headers["To"]["uri"]}>;tag={tag}\r\n'
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+        )
         reg_request += (
             f"CSeq: {request.headers['CSeq']['check']} "
             f"{request.headers['CSeq']['method']}\r\n"
         )
-        reg_request += f'Contact: <sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n' \
-                       f'{self.gen_allow()}' \
-                       f'Content-Length: {len(body)}\r\n\r\n' \
-                       f'{body}'
+        reg_request += (
+            f"Contact: <sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
+            f"{self.gen_allow()}"
+            f"Content-Length: {len(body)}\r\n\r\n"
+            f"{body}"
+        )
 
         return reg_request
 
@@ -687,13 +712,15 @@ class SIPClient:
             "Contact: "
             + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
         )
-        inv_request += f"To: <sip:{number}@{self.server}>\r\n" \
-                       f"From: <sip:{self.user}@{self.bind_ip}>;tag={tag}\r\n" \
-                       f"Call-ID: {call_id}\r\n" \
-                       f"CSeq: {self.inviteCounter.next()} INVITE\r\n" \
-                       f"{self.gen_allow()}" \
-                       f"Content-Length: {len(body)}\r\n\r\n" \
-                       f"{body}"
+        inv_request += (
+            f"To: <sip:{number}@{self.server}>\r\n"
+            f"From: <sip:{self.user}@{self.bind_ip}>;tag={tag}\r\n"
+            f"Call-ID: {call_id}\r\n"
+            f"CSeq: {self.inviteCounter.next()} INVITE\r\n"
+            f"{self.gen_allow()}"
+            f"Content-Length: {len(body)}\r\n\r\n"
+            f"{body}"
+        )
 
         return inv_request
 
@@ -704,37 +731,46 @@ class SIPClient:
         to_h = f'{self.gen_to_for_response(request)}<{request.headers["To"]["uri"]}>'
         cseq = int(request.headers["CSeq"]["check"]) + 1
 
-        bye_request = f'BYE {c} SIP/2.0\r\n' \
-                      f'{self._gen_response_via_header(request)}'
+        bye_request = (
+            f"BYE {c} SIP/2.0\r\n" f"{self._gen_response_via_header(request)}"
+        )
         if request.headers["From"]["tag"] == tag:
-            bye_request += f'From: {from_h};tag={tag}\r\n' \
-                           f'To: {request.headers["To"]["raw"]}\r\n'
+            bye_request += (
+                f"From: {from_h};tag={tag}\r\n"
+                f'To: {request.headers["To"]["raw"]}\r\n'
+            )
         else:
-            bye_request += f'To: {request.headers["From"]["raw"]}\r\n' \
-                           f'From: {to_h};tag={tag}\r\n'
-        bye_request += f'Call-ID: {request.headers["Call-ID"]}\r\n' \
-                       f'CSeq: {cseq} BYE\r\n' \
-                       f'Contact: <sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n' \
-                       f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' \
-                       f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n' \
-                       f'Content-Length: 0\r\n\r\n'
+            bye_request += (
+                f'To: {request.headers["From"]["raw"]}\r\n'
+                f"From: {to_h};tag={tag}\r\n"
+            )
+        bye_request += (
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+            f"CSeq: {cseq} BYE\r\n"
+            f"Contact: <sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+            f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
+            f"Content-Length: 0\r\n\r\n"
+        )
 
         return bye_request
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
         uri = request.headers["To"]["uri"]
-        ack_message = f'ACK {uri} SIP/2.0\r\n' \
-                      f'{self._gen_response_via_header(request)}' \
-                      f'Max-Forwards: 70\r\n' \
-                      f'To: {self.gen_to_for_response(request)}' \
-                      f'<{request.headers["To"]["uri"]}>;tag={request.headers["To"]["tag"]}\r\n' \
-                      f'From: {self.gen_from_for_response(request)}' \
-                      f'<{request.headers["From"]["uri"]}>;tag={tag}\r\n' \
-                      f'Call-ID: {request.headers["Call-ID"]}\r\n' \
-                      f'CSeq: {request.headers["CSeq"]["check"]} ACK\r\n' \
-                      f'User-Agent: pyVoIP {pyVoIP.__version__}\r\n' \
-                      f'Content-Length: 0\r\n\r\n'
+        ack_message = (
+            f"ACK {uri} SIP/2.0\r\n"
+            f"{self._gen_response_via_header(request)}"
+            f"Max-Forwards: 70\r\n"
+            f"To: {self.gen_to_for_response(request)}"
+            f'<{request.headers["To"]["uri"]}>;tag={request.headers["To"]["tag"]}\r\n'
+            f"From: {self.gen_from_for_response(request)}"
+            f'<{request.headers["From"]["uri"]}>;tag={tag}\r\n'
+            f'Call-ID: {request.headers["Call-ID"]}\r\n'
+            f'CSeq: {request.headers["CSeq"]["check"]} ACK\r\n'
+            f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+            f"Content-Length: 0\r\n\r\n"
+        )
 
         return ack_message
 
