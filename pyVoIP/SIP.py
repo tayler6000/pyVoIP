@@ -409,7 +409,7 @@ class SIPMessage:
             data += f"{x}: {self.body[x]}\n"
         data += "\n"
         data += "Raw:\n"
-        data += str(self.raw)
+        data += self.raw.decode('utf8')
 
         return data
 
@@ -885,9 +885,7 @@ class SIPClient:
             except SIPParseError as e:
                 if "SIP Version" in str(e):
                     request = self.gen_sip_version_not_supported(message)
-                    self.out.sendto(
-                        request.encode("utf8"), (self.server, self.port)
-                    )
+                    self.sendto(request)
                 else:
                     debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
             except Exception as e:
@@ -926,9 +924,7 @@ class SIPClient:
         elif message.method == "INVITE":
             if self.call_callback is None:
                 request = self.gen_busy(message)
-                self.out.sendto(
-                    request.encode("utf8"), (self.server, self.port)
-                )
+                self.sendto(request)
             else:
                 self.call_callback(message)
         elif message.method == "BYE":
@@ -941,28 +937,23 @@ class SIPClient:
                 (_sender_adress, _sender_port) = message.headers["Via"][0][
                     "address"
                 ]
-                self.out.sendto(
-                    response.encode("utf8"),
-                    (_sender_adress, int(_sender_port)),
-                )
+                self.sendto(response, (_sender_adress, int(_sender_port)))
             except Exception:
                 debug("BYE Answer failed falling back to server as target")
-                self.out.sendto(
-                    response.encode("utf8"), (self.server, self.port)
-                )
+                self.sendto(response)
         elif message.method == "ACK":
             return
         elif message.method == "CANCEL":
             # TODO: If callCallback is None, the call doesn't exist, 481
             self.call_callback(message)  # type: ignore
             response = self.gen_ok(message)
-            self.out.sendto(response.encode("utf8"), (self.server, self.port))
+            self.sendto(response)
         elif message.method == "OPTIONS":
             if self.call_callback:
                 response = self.call_callback(message)
             else:
                 response = self._gen_options_response(message)
-            self.out.sendto(response.encode("utf8"), (self.server, self.port))
+            self.sendto(response)
         else:
             debug("TODO: Add 400 Error on non processable request")
 
@@ -998,6 +989,12 @@ class SIPClient:
         if hasattr(self, "out"):
             if self.out:
                 self.out.close()
+
+    def sendto(self, request, address=None) -> None:
+        if address is None:
+            address = (self.server, self.port)
+        self.out.sendto(request.encode('utf-8'), address)
+        debug(f"SENT:\n{request}\n")
 
     def gen_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.next()).encode("utf8"))
@@ -1453,7 +1450,7 @@ class SIPClient:
             number, str(sess_id), ms, sendtype, branch, call_id
         )
         self.recvLock.acquire()
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+        self.sendto(invite)
         debug("Invited")
         response = SIPMessage(self.s.recv(8192))
 
@@ -1473,7 +1470,7 @@ class SIPClient:
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
         debug(f"Received Response: {response.summary()}")
         ack = self.gen_ack(response)
-        self.out.sendto(ack.encode("utf8"), (self.server, self.port))
+        self.sendto(ack)
         debug("Acknowledged")
         authhash = self.gen_authorization(response)
         nonce = response.authentication["nonce"]
@@ -1492,7 +1489,7 @@ class SIPClient:
             "\r\nContent-Length", f"\r\n{auth}Content-Length"
         )
 
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+        self.sendto(invite)
 
         self.recvLock.release()
 
@@ -1501,12 +1498,12 @@ class SIPClient:
     def bye(self, request: SIPMessage) -> None:
         message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
-        self.out.sendto(message.encode("utf8"), (self.server, self.port))
+        self.sendto(message)
 
     def deregister(self) -> bool:
         self.recvLock.acquire()
         firstRequest = self.gen_first_request(deregister=True)
-        self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
+        self.sendto(firstRequest)
 
         self.out.setblocking(False)
 
@@ -1522,9 +1519,7 @@ class SIPClient:
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
             regRequest = self.gen_register(response, deregister=True)
-            self.out.sendto(
-                regRequest.encode("utf8"), (self.server, self.port)
-            )
+            self.sendto(regRequest)
             ready = select.select([self.s], [], [], self.register_timeout)
             if ready[0]:
                 resp = self.s.recv(8192)
@@ -1562,7 +1557,7 @@ class SIPClient:
     def register(self) -> bool:
         self.recvLock.acquire()
         firstRequest = self.gen_first_request()
-        self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
+        self.sendto(firstRequest)
 
         self.out.setblocking(False)
 
@@ -1586,9 +1581,7 @@ class SIPClient:
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
             regRequest = self.gen_register(response)
-            self.out.sendto(
-                regRequest.encode("utf8"), (self.server, self.port)
-            )
+            self.sendto(regRequest)
             ready = select.select([self.s], [], [], self.register_timeout)
             if ready[0]:
                 resp = self.s.recv(8192)
@@ -1677,7 +1670,7 @@ class SIPClient:
         self.recvLock.acquire()
 
         subRequest = self.gen_subscribe(lastresponse)
-        self.out.sendto(subRequest.encode("utf8"), (self.server, self.port))
+        self.sendto(subRequest)
 
         response = SIPMessage(self.s.recv(8192))
 
