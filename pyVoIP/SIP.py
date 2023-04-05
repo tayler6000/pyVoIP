@@ -510,7 +510,7 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization":
+        elif header in ("WWW-Authenticate", "Authorization", "Proxy-Authenticate"):
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
@@ -908,6 +908,9 @@ class SIPClient:
             elif message.status == SIPStatus.SERVICE_UNAVAILABLE:
                 if self.call_callback is not None:
                     self.call_callback(message)
+            elif message.status == SIPStatus.PROXY_AUTHENTICATION_REQUIRED:
+                if self.call_callback is not None:
+                    self.call_callback(message)
             elif (
                 message.status == SIPStatus.TRYING
                 or message.status == SIPStatus.RINGING
@@ -1039,23 +1042,29 @@ class SIPClient:
 
         return response
 
-    def gen_authorization(self, request: SIPMessage) -> bytes:
-        realm = request.authentication["realm"]
-        HA1 = self.username + ":" + realm + ":" + self.password
+    def gen_auth(self, realm, uri, method, nonce, qop=None, nc=None, cnonce=None) -> bytes:
+        HA1 = f"{self.username}:{realm}:{self.password}"
         HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
-        HA2 = (
-            ""
-            + request.headers["CSeq"]["method"]
-            + ":sip:"
-            + self.server
-            + ";transport=UDP"
-        )
+        HA2 = f"{method}:{uri}"
         HA2 = hashlib.md5(HA2.encode("utf8")).hexdigest()
-        nonce = request.authentication["nonce"]
-        response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
-        response = hashlib.md5(response).hexdigest().encode("utf8")
+        response = f"{HA1}:{nonce}"
+        if qop:
+            response += f":{nc}:{cnonce}:{qop}"
+        response += f":{HA2}"
+        return hashlib.md5(response.encode("utf8")).hexdigest().encode("utf8")
 
-        return response
+    def gen_authorization(self, request: SIPMessage, uri: str) -> bytes:
+        realm = request.authentication["realm"]
+        method = request.headers["CSeq"]["method"]
+        nonce = request.authentication["nonce"]
+        return self.gen_auth(realm, uri, method, nonce)
+
+    def gen_proxy_authorization(self, request: SIPMessage, uri: str, nc: str, cnonce: str) -> bytes:
+        realm = request.authentication["realm"]
+        method = request.headers["CSeq"]["method"]
+        nonce = request.authentication["nonce"]
+        qop = request.authentication.get('qop', 'auth')
+        return self.gen_auth(realm, uri, method, nonce, qop, nc, cnonce)
 
     def gen_branch(self, length=32) -> str:
         """
@@ -1140,7 +1149,8 @@ class SIPClient:
         return subRequest
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
-        response = str(self.gen_authorization(request), "utf8")
+        uri = f"sip:{self.server};transport=UDP"
+        response = str(self.gen_authorization(request, uri), "utf8")
         nonce = request.authentication["nonce"]
         realm = request.authentication["realm"]
 
@@ -1456,31 +1466,58 @@ class SIPClient:
 
         while (
             response.status != SIPStatus(401)
+            and response.status != SIPStatus(407)
             and response.status != SIPStatus(100)
             and response.status != SIPStatus(180)
         ) or response.headers["Call-ID"] != call_id:
             if not self.NSD:
                 break
+            debug(f"Received Response: {response.summary()}")
             self.parse_message(response)
             response = SIPMessage(self.s.recv(8192))
 
-        if response.status == SIPStatus(100) or response.status == SIPStatus(
-            180
-        ):
-            return SIPMessage(invite.encode("utf8")), call_id, sess_id
         debug(f"Received Response: {response.summary()}")
+
+        if (
+            response.status == SIPStatus(100)
+            or response.status == SIPStatus(180)
+        ):
+            debug('Invite status OK')
+            self.recvLock.release()
+            return SIPMessage(invite.encode("utf8")), call_id, sess_id
         ack = self.gen_ack(response)
         self.sendto(ack)
         debug("Acknowledged")
-        authhash = self.gen_authorization(response)
-        nonce = response.authentication["nonce"]
-        realm = response.authentication["realm"]
-        auth = (
-            f'Authorization: Digest username="{self.username}",realm='
-            + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
-            + f'transport=UDP",response="{str(authhash, "utf8")}",'
-            + "algorithm=MD5\r\n"
-        )
+
+        qop = response.authentication.get('qop', None)
+        header = 'Authorization'
+        if response.status == SIPStatus(407):
+            header = 'Proxy-Authorization'
+        if not qop:
+            uri = f"sip:{number}@{self.server}"
+            authhash = self.gen_authorization(response, uri)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'{header}: Digest username="{self.username}",realm='
+                + f'"{realm}",nonce="{nonce}",uri="{uri}",'
+                + f'response="{str(authhash, "utf8")}",'
+                + "algorithm=MD5\r\n"
+            )
+        else:
+            nc = 1
+            cnonce = hashlib.sha256(response.raw).hexdigest()[:32]
+            uri = f"sip:{number}@{self.server}"
+            authhash = self.gen_proxy_authorization(response, uri, nc, cnonce)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'Proxy-Authorization: Digest username="{self.username}",'
+                + f'realm="{realm}",nonce="{nonce}",uri="{uri}",'
+                + f'response="{str(authhash, "utf8")}",'
+                + f'cnonce="{cnonce}",qop=auth,nc={nc:08},'
+                + "algorithm=MD5\r\n"
+            )
 
         invite = self.gen_invite(
             number, str(sess_id), ms, sendtype, branch, call_id
