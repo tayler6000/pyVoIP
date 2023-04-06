@@ -660,10 +660,14 @@ class VoIPPhone:
         self.sip.stop()
         self._status = PhoneStatus.INACTIVE
 
-    def call(self, number: str) -> VoIPCall:
+    def call(self, number: str, media: Dict[int, RTP.PayloadType] = None) -> VoIPCall:
         port = self.request_port()
+        if media is None:
+            media = {0: RTP.PayloadType.PCMU}
+        # must have
+        media[101] = RTP.PayloadType.EVENT
         medias = {}
-        medias[port] = {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}
+        medias[port] = media
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
