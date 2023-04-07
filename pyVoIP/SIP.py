@@ -899,22 +899,20 @@ class SIPClient:
 
     def parse_message(self, message: SIPMessage) -> None:
         if message.type != SIPMessageType.MESSAGE:
-            if message.status == SIPStatus.OK:
-                if self.call_callback is not None:
-                    self.call_callback(message)
-            elif message.status == SIPStatus.NOT_FOUND:
-                if self.call_callback is not None:
-                    self.call_callback(message)
-            elif message.status == SIPStatus.SERVICE_UNAVAILABLE:
-                if self.call_callback is not None:
-                    self.call_callback(message)
-            elif message.status == SIPStatus.PROXY_AUTHENTICATION_REQUIRED:
+            if (
+                   message.status == SIPStatus.OK
+                or message.status == SIPStatus.NOT_FOUND
+                or message.status == SIPStatus.SERVICE_UNAVAILABLE
+                or message.status == SIPStatus.PROXY_AUTHENTICATION_REQUIRED
+                or message.status == SIPStatus.RINGING
+                or message.status == SIPStatus.BUSY_HERE
+                or message.status == SIPStatus.SESSION_PROGRESS
+               ):
                 if self.call_callback is not None:
                     self.call_callback(message)
             elif (
                 message.status == SIPStatus.TRYING
-                or message.status == SIPStatus.RINGING
-            ):
+               ):
                 pass
             else:
                 debug(
