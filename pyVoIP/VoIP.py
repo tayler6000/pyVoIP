@@ -2,7 +2,7 @@ from enum import Enum
 
 from pyVoIP import SIP, RTP
 from threading import Timer, Lock
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 import audioop
 import io
 import pyVoIP
@@ -406,6 +406,9 @@ class VoIPCall:
         # also resets all other warnings.
         warnings.simplefilter("default")
 
+    def ringing(self, request: SIP.SIPMessage) -> None:
+        self.deny()
+
     def busy(self, request: SIP.SIPMessage) -> None:
         self.bye()
 
@@ -490,9 +493,14 @@ class VoIPPhone:
         sipPort=5060,
         rtpPortLow=10000,
         rtpPortHigh=20000,
+        callClass: Type[VoIPCall] = None,
+        sipClass: Type[SIP.SIPClient] = None,
     ):
         if rtpPortLow > rtpPortHigh:
             raise InvalidRangeError("'rtpPortHigh' must be >= 'rtpPortLow'")
+
+        self.callClass = not callClass is None and callClass or VoIPCall
+        self.sipClass = not sipClass is None and sipClass or SIP.SIPClient
 
         self.rtpPortLow = rtpPortLow
         self.rtpPortHigh = rtpPortHigh
@@ -518,7 +526,7 @@ class VoIPPhone:
         self.threads: List[Timer] = []
         # Allows you to find call ID based off thread.
         self.threadLookup: Dict[Timer, str] = {}
-        self.sip = SIP.SIPClient(
+        self.sip = self.sipClass(
             server,
             port,
             username,
@@ -574,7 +582,7 @@ class VoIPPhone:
             if self.calls[call_id].state != CallState.RINGING:
                 self.calls[call_id].renegotiate(request)
             return  # Raise Error
-        if self.callCallback is None:
+        if self.callCallback is None and self.callClass is None:
             message = self.sip.gen_busy(request)
             self.sip.sendto(message)
         else:
@@ -587,9 +595,12 @@ class VoIPPhone:
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
             self.sip.sendto(message)
-            self._create_Call(request, sess_id)
+            call = self._create_Call(request, sess_id)
             try:
-                t = Timer(1, self.callCallback, [self.calls[call_id]])
+                if self.callClass is None:
+                    t = Timer(1, self.callCallback, [self.calls[call_id]])
+                else:
+                    t = Timer(1, call.ringing, [request])
                 t.name = f"Phone Call: {call_id}"
                 t.start()
                 self.threads.append(t)
@@ -668,13 +679,13 @@ class VoIPPhone:
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
-    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> None:
+    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> VoIPCall:
         """
         Create VoIP call object. Should be separated to enable better
         subclassing.
         """
         call_id = request.headers["Call-ID"]
-        self.calls[call_id] = VoIPCall(
+        self.calls[call_id] = self.callClass(
             self,
             CallState.RINGING,
             request,
@@ -682,6 +693,7 @@ class VoIPPhone:
             self.myIP,
             sendmode=self.recvmode,
         )
+        return self.calls[call_id]
 
     def start(self) -> None:
         self._status = PhoneStatus.REGISTERING
@@ -716,7 +728,7 @@ class VoIPPhone:
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
-        self.calls[call_id] = VoIPCall(
+        self.calls[call_id] = self.callClass(
             self,
             CallState.DIALING,
             request,
