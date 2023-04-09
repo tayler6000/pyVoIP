@@ -6,7 +6,7 @@ Here we will go over a few basic phone setups.
 Setup
 *****
 
-PyVoIP uses callback functions to initiate phone calls.  In the example below, our callback function is named ``answer``.  The callback takes one argument, which is a :ref:`VoIPCall` instance.
+PyVoIP uses :ref:`VoIPPhone` child class to initiate phone calls.  In the example below, our ringing function is named ``Call.ringing``.
 
 We are also importing :ref:`VoIPPhone` and :ref:`InvalidStateError<invalidstateerror>`.  VoIPPhone is the main class for our `softphone <https://en.wikipedia.org/wiki/Softphone>`_.  An InvalidStateError is thrown when you try to perform an impossible command.  For example, denying the call when the phone is already answered, answering when it's already answered, etc.
 
@@ -26,7 +26,7 @@ The following will create a phone that answers and automatically hangs up:
               pass
 
   if __name__ == "__main__":
-      phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, myIP=<Your computer's local IP>, callClass=Call)
+      phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, bind_ip=<Your computer's local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
@@ -65,7 +65,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
               call.hangup()
 
   if __name__ == "__main__":
-      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, myIP=<Your computers local IP>, callClass=Call)
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
@@ -121,7 +121,7 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
               call.hangup()
 
   if __name__ == '__main__':
-      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, myIP=<Your computers local IP>, callClass=Call)
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
@@ -158,7 +158,7 @@ We can use the following code to handle various states for the outgoing calls:
           super().bye()
 
   if __name__ == '__main__':
-      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, myIP=<Your computers local IP>, callClass=Call)
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
       phone.start()
       phone.call(<Phone Number>)
       input('Press enter to disable the phone\n')
