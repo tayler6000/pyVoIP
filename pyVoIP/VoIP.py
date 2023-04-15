@@ -568,8 +568,6 @@ class VoIPPhone:
             return
         self.calls[call_id].progress(request)
         debug("Progress")
-        ack = self.sip.gen_ack(request)
-        self.sip.sendto(ack)
 
     def _callback_RESP_Busy(self, request: SIP.SIPMessage) -> None:
         debug("Busy received")
