@@ -1375,10 +1375,10 @@ class SIPClient:
 
         return invRequest
 
-    def gen_bye(self, request: SIPMessage) -> str:
+    def gen_bye_cancel(self, request: SIPMessage, cmd: str) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
         c = request.headers["Contact"].strip("<").strip(">")
-        byeRequest = f"BYE {c} SIP/2.0\r\n"
+        byeRequest = f"{cmd} {c} SIP/2.0\r\n"
         byeRequest += self._gen_response_via_header(request)
         _from = request.headers["From"]
         fromH = f' "{_from["display-name"]}" <{_from["uri"]}>'
@@ -1391,8 +1391,8 @@ class SIPClient:
             byeRequest += f"To: {_from['raw']}\r\n"
             byeRequest += f"From: {toH};tag={tag}\r\n"
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
-        cseq = int(request.headers["CSeq"]["check"]) + 1
-        byeRequest += f"CSeq: {cseq} BYE\r\n"
+        cseq = request.headers["CSeq"]["check"]
+        byeRequest += f"CSeq: {cseq} {cmd}\r\n"
         byeRequest += (
             "Contact: "
             + f"<sip:{self.username}@{self.bind_ip}:{self.bind_port}>\r\n"
@@ -1402,6 +1402,12 @@ class SIPClient:
         byeRequest += "Content-Length: 0\r\n\r\n"
 
         return byeRequest
+
+    def gen_bye(self, request: SIPMessage) -> str:
+        return self.gen_bye_cancel(request, 'BYE')
+
+    def gen_cancel(self, request: SIPMessage) -> str:
+        return self.gen_bye_cancel(request, 'CANCEL')
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
@@ -1533,6 +1539,10 @@ class SIPClient:
     def bye(self, request: SIPMessage) -> None:
         message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
+        self.sendto(message)
+
+    def cancel(self, request: SIPMessage) -> None:
+        message = self.gen_cancel(request)
         self.sendto(message)
 
     def deregister(self) -> bool:

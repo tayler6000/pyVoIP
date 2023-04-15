@@ -301,6 +301,7 @@ class VoIPCall:
     def progress(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
             return
+        self.request = request
         self.rtp_answered(request)
         self.state = CallState.PROGRESS
 
@@ -354,7 +355,10 @@ class VoIPCall:
         warnings.simplefilter("default")
 
     def ringing(self, request: SIP.SIPMessage) -> None:
-        self.deny()
+        if self.state == CallState.RINGING:
+            self.deny()
+        else:
+            self.request = request
 
     def busy(self, request: SIP.SIPMessage) -> None:
         self.bye()
@@ -372,12 +376,24 @@ class VoIPCall:
     def hangup(self) -> None:
         if (
             self.state != CallState.ANSWERED
-            and self.state != CallState.PROGRESS
            ):
-            raise InvalidStateError("Call is not answered or in progress")
+            raise InvalidStateError("Call is not answered")
         for x in self.RTPClients:
             x.stop()
         self.sip.bye(self.request)
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+
+    def cancel(self) -> None:
+        if (
+            self.state != CallState.DIALING
+            and self.state != CallState.PROGRESS
+           ):
+            raise InvalidStateError("Call is not dialing or in progress")
+        for x in self.RTPClients:
+            x.stop()
+        self.sip.cancel(self.request)
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -485,6 +501,8 @@ class VoIPPhone:
                 self._callback_RESP_NotFound(request)
             elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
                 self._callback_RESP_Unavailable(request)
+            elif request.status == SIP.SIPStatus.RINGING:
+                self._callback_RESP_Ringing(request)
             elif request.status == SIP.SIPStatus.SESSION_PROGRESS:
                 self._callback_RESP_Progress(request)
             elif request.status == SIP.SIPStatus.BUSY_HERE:
@@ -560,6 +578,14 @@ class VoIPPhone:
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
+    def _callback_RESP_Ringing(self, request: SIP.SIPMessage) -> None:
+        debug("Ringing received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+            return
+        self.calls[call_id].ringing(request)
+
     def _callback_RESP_Progress(self, request: SIP.SIPMessage) -> None:
         debug("Session progress received")
         call_id = request.headers["Call-ID"]
@@ -567,7 +593,6 @@ class VoIPPhone:
             debug("Unknown/No call")
             return
         self.calls[call_id].progress(request)
-        debug("Progress")
 
     def _callback_RESP_Busy(self, request: SIP.SIPMessage) -> None:
         debug("Busy received")
