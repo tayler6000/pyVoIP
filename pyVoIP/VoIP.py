@@ -576,8 +576,8 @@ class VoIPPhone:
         # TODO: Somehow never is reached. Find out if you have a network
         # issue here or your invite is wrong.
         if request.headers['CSeq']['method'] == 'CANCEL':
-            self.calls[call_id].bye()
             debug("Canceled")
+            return
         else:
             self.calls[call_id].answered(request)
             debug("Answered")
