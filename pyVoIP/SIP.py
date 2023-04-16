@@ -1413,12 +1413,13 @@ class SIPClient:
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
-        t = request.headers["To"]["raw"].strip("<").strip(">")
+        to_raw = request.headers["To"]['raw']
+        t = to_raw.strip("<").strip(">")
         ackMessage = f"ACK {t} SIP/2.0\r\n"
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
-        ackMessage += self._gen_from_to(request, "To", self.gen_tag())
         ackMessage += self._gen_from_to(request, "From", tag)
+        ackMessage += f"To: {to_raw}\r\n"
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
         ackMessage += f"CSeq: {request.headers['CSeq']['check']} ACK\r\n"
         ackMessage += self._gen_user_agent()

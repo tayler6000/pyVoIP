@@ -39,6 +39,7 @@ class CallState(Enum):
     RINGING = "RINGING"
     PROGRESS = "PROGRESS"
     ANSWERED = "ANSWERED"
+    CANCELING = "CANCELING"
     ENDED = "ENDED"
 
 
@@ -394,14 +395,13 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.sip.cancel(self.request)
-        self.state = CallState.ENDED
-        if self.request.headers["Call-ID"] in self.phone.calls:
-            del self.phone.calls[self.request.headers["Call-ID"]]
+        self.state = CallState.CANCELING
 
     def bye(self) -> None:
         if (
             self.state == CallState.ANSWERED
             or self.state == CallState.PROGRESS
+            or self.state == CallState.CANCELING
            ):
             for x in self.RTPClients:
                 x.stop()
@@ -575,8 +575,12 @@ class VoIPPhone:
             return
         # TODO: Somehow never is reached. Find out if you have a network
         # issue here or your invite is wrong.
-        self.calls[call_id].answered(request)
-        debug("Answered")
+        if request.headers['CSeq']['method'] == 'CANCEL':
+            self.calls[call_id].bye()
+            debug("Canceled")
+        else:
+            self.calls[call_id].answered(request)
+            debug("Answered")
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
