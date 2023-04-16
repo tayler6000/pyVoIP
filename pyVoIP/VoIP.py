@@ -709,6 +709,11 @@ class VoIPPhone:
 
         return self.calls[call_id]
 
+    def message(self, number: str, body:str,
+                                ctype: str = 'text/plain') -> bool:
+        response = self.sip.message(number, body, ctype)
+        return response and response.status == SIP.SIPStatus.OK
+
     def request_port(self, blocking=True) -> int:
         ports_available = [
             port

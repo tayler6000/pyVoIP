@@ -856,6 +856,7 @@ class SIPClient:
         self.registerCounter = Counter()
         self.subscribeCounter = Counter()
         self.byeCounter = Counter()
+        self.messageCounter = Counter()
         self.callID = Counter()
         self.sessID = Counter()
 
@@ -1071,6 +1072,38 @@ class SIPClient:
         method = request.headers["CSeq"]["method"]
         nonce = request.authentication["nonce"]
         return self.gen_auth(realm, uri, method, nonce)
+
+    def gen_auth_header(self, response: SIPMessage, number: str) -> str:
+        qop = response.authentication.get('qop', None)
+        header = 'Authorization'
+        if response.status == SIPStatus(407):
+            header = 'Proxy-Authorization'
+        if not qop:
+            uri = f"sip:{number}@{self.server}"
+            authhash = self.gen_authorization(response, uri)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'{header}: Digest username="{self.username}",realm='
+                + f'"{realm}",nonce="{nonce}",uri="{uri}",'
+                + f'response="{str(authhash, "utf8")}",'
+                + "algorithm=MD5\r\n"
+            )
+        else:
+            nc = 1
+            cnonce = hashlib.sha256(response.raw).hexdigest()[:32]
+            uri = f"sip:{number}@{self.server}"
+            authhash = self.gen_proxy_authorization(response, uri, nc, cnonce)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'Proxy-Authorization: Digest username="{self.username}",'
+                + f'realm="{realm}",nonce="{nonce}",uri="{uri}",'
+                + f'response="{str(authhash, "utf8")}",'
+                + f'cnonce="{cnonce}",qop=auth,nc={nc:08},'
+                + "algorithm=MD5\r\n"
+            )
+        return auth
 
     def gen_proxy_authorization(self, request: SIPMessage, uri: str, nc: str, cnonce: str) -> bytes:
         realm = request.authentication["realm"]
@@ -1492,36 +1525,7 @@ class SIPClient:
         self.sendto(ack)
         debug("Acknowledged")
 
-        qop = response.authentication.get('qop', None)
-        header = 'Authorization'
-        if response.status == SIPStatus(407):
-            header = 'Proxy-Authorization'
-        if not qop:
-            uri = f"sip:{number}@{self.server}"
-            authhash = self.gen_authorization(response, uri)
-            nonce = response.authentication["nonce"]
-            realm = response.authentication["realm"]
-            auth = (
-                f'{header}: Digest username="{self.username}",realm='
-                + f'"{realm}",nonce="{nonce}",uri="{uri}",'
-                + f'response="{str(authhash, "utf8")}",'
-                + "algorithm=MD5\r\n"
-            )
-        else:
-            nc = 1
-            cnonce = hashlib.sha256(response.raw).hexdigest()[:32]
-            uri = f"sip:{number}@{self.server}"
-            authhash = self.gen_proxy_authorization(response, uri, nc, cnonce)
-            nonce = response.authentication["nonce"]
-            realm = response.authentication["realm"]
-            auth = (
-                f'Proxy-Authorization: Digest username="{self.username}",'
-                + f'realm="{realm}",nonce="{nonce}",uri="{uri}",'
-                + f'response="{str(authhash, "utf8")}",'
-                + f'cnonce="{cnonce}",qop=auth,nc={nc:08},'
-                + "algorithm=MD5\r\n"
-            )
-
+        auth = self.gen_auth_header(response, number)
         invite = self.gen_invite(
             number, str(sess_id), ms, sendtype, branch, call_id
         )
@@ -1534,6 +1538,58 @@ class SIPClient:
         self.recvLock.release()
 
         return SIPMessage(invite.encode("utf8")), call_id, sess_id
+
+    def gen_message(self, number: str, body: str, ctype: str,
+                            branch: str, call_id: str) -> str:
+        msg = f"MESSAGE sip:{number}@{self.server} SIP/2.0\r\n"
+        msg += (
+            f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
+            + f"{branch}\r\n"
+        )
+        msg += "Max-Forwards: 70\r\n"
+        msg += f"To: <sip:{number}@{self.server}>\r\n"
+        msg += f"From: <sip:{self.username}@{self.bind_ip}>;tag={self.gen_tag()}\r\n"
+        msg += f"Call-ID: {call_id}\r\n"
+        msg += f"CSeq: {self.messageCounter.next()} MESSAGE\r\n"
+        msg += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+        msg += f"Content-Type: {ctype}\r\n"
+        msg += self._gen_user_agent()
+        msg += f"Content-Length: {len(body)}\r\n\r\n"
+        msg += body
+        return msg
+
+    def message(self, number: str, body: str,
+                        ctype: str = 'text/plain') -> SIPMessage:
+        branch = "z0hG4bK" + self.gen_call_id()[0:25]
+        call_id = self.gen_call_id()
+        msg = self.gen_message(number, body, ctype, branch, call_id)
+        self.recvLock.acquire()
+        self.sendto(msg)
+        debug("Message")
+        auth = False
+        while True:
+            response = SIPMessage(self.s.recv(8192))
+            debug(f"Received Response: {response.summary()}")
+            self.parse_message(response)
+            if response.status == SIPStatus(100):
+                continue
+            if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+                if auth:
+                    debug('Auth failure')
+                    break
+                auth = True
+                auth = self.gen_auth_header(response, number)
+                msg = msg.replace(
+                    "\r\nContent-Length", f"\r\n{auth}Content-Length"
+                )
+                self.sendto(msg)
+                continue
+            if response.status == SIPStatus.OK:
+                break
+            if self.NSD:
+                break
+        self.recvLock.release()
+        return response
 
     def bye(self, request: SIPMessage) -> None:
         message = self.gen_bye(request)
