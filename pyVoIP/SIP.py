@@ -907,6 +907,7 @@ class SIPClient:
                 or message.status == SIPStatus.RINGING
                 or message.status == SIPStatus.BUSY_HERE
                 or message.status == SIPStatus.SESSION_PROGRESS
+                or message.status == SIPStatus.REQUEST_TERMINATED
                ):
                 if self.call_callback is not None:
                     self.call_callback(message)

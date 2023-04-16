@@ -507,6 +507,8 @@ class VoIPPhone:
                 self._callback_RESP_Progress(request)
             elif request.status == SIP.SIPStatus.BUSY_HERE:
                 self._callback_RESP_Busy(request)
+            elif request.status == SIP.SIPStatus.REQUEST_TERMINATED:
+                self._callback_RESP_Terminated(request)
 
     def get_status(self) -> PhoneStatus:
         return self._status
@@ -601,6 +603,16 @@ class VoIPPhone:
             debug("Unknown/No call")
             return
         self.calls[call_id].busy(request)
+        ack = self.sip.gen_ack(request)
+        self.sip.sendto(ack)
+
+    def _callback_RESP_Terminated(self, request: SIP.SIPMessage) -> None:
+        debug("Request terminated received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+        else:
+            self.calls[call_id].bye()
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
