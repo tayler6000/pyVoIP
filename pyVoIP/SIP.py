@@ -1017,16 +1017,27 @@ class SIPClient:
                 return tag
         return ""
 
+    def _gen_from_to(self, request: SIPMessage, hdr: str,
+                        tag: str = None, dsthdr: str = None) -> str:
+        if dsthdr is None:
+            dsthdr = hdr
+        h = request.headers[hdr]
+        dn = ""
+        if h["display-name"]:
+            ret = f'{dsthdr}: "{h["display-name"]}" '
+        else:
+            ret = f'{dsthdr}:'
+        if tag:
+            return f'{ret} <{h["uri"]}>;tag={tag}\r\n'
+        else:
+            return f'{tat} <{h["uri"]}>\r\n'
+
     def gen_sip_version_not_supported(self, request: SIPMessage) -> str:
         # TODO: Add Supported
         response = "SIP/2.0 505 SIP Version Not Supported\r\n"
         response += self._gen_response_via_header(request)
         response += f"From: {request.headers['From']['raw']}\r\n"
-        to = request.headers["To"]
-        response += (
-            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
-        )
+        response += self._gen_from_to(request, "To", self.gen_tag())
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -1197,11 +1208,7 @@ class SIPClient:
         response = "SIP/2.0 486 Busy Here\r\n"
         response += self._gen_response_via_header(request)
         response += f"From: {request.headers['From']['raw']}\r\n"
-        to = request.headers["To"]
-        response += (
-            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
-        )
+        response += self._gen_from_to(request, "To", self.gen_tag())
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -1220,11 +1227,7 @@ class SIPClient:
         okResponse = "SIP/2.0 200 OK\r\n"
         okResponse += self._gen_response_via_header(request)
         okResponse += f"From: {request.headers['From']['raw']}\r\n"
-        to = request.headers["To"]
-        okResponse += (
-            f'To: "{to["display-name"]}" <{to["uri"]}>;tag='
-            + f"{self.gen_tag()}\r\n"
-        )
+        okResponse += self._gen_from_to(request, "To", self.gen_tag())
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
         okResponse += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -1237,12 +1240,10 @@ class SIPClient:
         return okResponse
 
     def gen_ringing(self, request: SIPMessage) -> str:
-        tag = self.gen_tag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._gen_response_via_header(request)
         regRequest += f"From: {request.headers['From']['raw']}\r\n"
-        to = request.headers["To"]
-        regRequest += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={tag}\r\n'
+        regRequest += self._gen_from_to(request, "To", self.gen_tag())
         regRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         regRequest += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -1295,8 +1296,7 @@ class SIPClient:
         regRequest = "SIP/2.0 200 OK\r\n"
         regRequest += self._gen_response_via_header(request)
         regRequest += f"From: {request.headers['From']['raw']}\r\n"
-        to = request.headers["To"]
-        regRequest += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={tag}\r\n'
+        regRequest += self._gen_from_to(request, "To", tag)
         regRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         regRequest += (
             f"CSeq: {request.headers['CSeq']['check']} "
@@ -1381,15 +1381,13 @@ class SIPClient:
         byeRequest = f"{cmd} {c} SIP/2.0\r\n"
         byeRequest += self._gen_response_via_header(request)
         _from = request.headers["From"]
-        fromH = f' "{_from["display-name"]}" <{_from["uri"]}>'
         to = request.headers["To"]
-        toH = f' "{to["display-name"]}" <{to["uri"]}>'
         if request.headers["From"]["tag"] == tag:
-            byeRequest += f"From: {fromH};tag={tag}\r\n"
+            byeRequest += self._gen_from_to(request, "From", tag)
             byeRequest += f"To: {to['raw']}\r\n"
         else:
             byeRequest += f"To: {_from['raw']}\r\n"
-            byeRequest += f"From: {toH};tag={tag}\r\n"
+            byeRequest += self._gen_from_to(request, "To", tag, dsthdr="From")
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         cseq = request.headers["CSeq"]["check"]
         byeRequest += f"CSeq: {cseq} {cmd}\r\n"
@@ -1415,12 +1413,8 @@ class SIPClient:
         ackMessage = f"ACK {t} SIP/2.0\r\n"
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
-        to = request.headers["To"]
-        ackMessage += f'To: "{to["display-name"]}" <{to["uri"]}>;tag={self.gen_tag()}\r\n'
-        _from = request.headers["From"]
-        ackMessage += (
-            f'From: "{_from["display-name"]}" <{_from["uri"]}>;tag={tag}\r\n'
-        )
+        ackMessage += self._gen_from_to(request, "To", self.gen_tag())
+        ackMessage += self._gen_from_to(request, "From", tag)
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
         ackMessage += f"CSeq: {request.headers['CSeq']['check']} ACK\r\n"
         ackMessage += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
