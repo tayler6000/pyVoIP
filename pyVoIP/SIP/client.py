@@ -108,7 +108,16 @@ class SIPClient:
 
     def parse_message(self, message: SIPMessage) -> None:
         if message.type != SIPMessageType.MESSAGE:
-            if message.status in (SIPStatus.OK, SIPStatus.NOT_FOUND, SIPStatus.SERVICE_UNAVAILABLE, SIPStatus.PROXY_AUTHENTICATION_REQUIRED, SIPStatus.RINGING, SIPStatus.BUSY_HERE, SIPStatus.SESSION_PROGRESS, SIPStatus.REQUEST_TERMINATED):
+            if message.status in (
+                SIPStatus.OK,
+                SIPStatus.NOT_FOUND,
+                SIPStatus.SERVICE_UNAVAILABLE,
+                SIPStatus.PROXY_AUTHENTICATION_REQUIRED,
+                SIPStatus.RINGING,
+                SIPStatus.BUSY_HERE,
+                SIPStatus.SESSION_PROGRESS,
+                SIPStatus.REQUEST_TERMINATED,
+            ):
                 if self.call_callback is not None:
                     self.call_callback(message)
             elif message.status == SIPStatus.TRYING:
@@ -143,26 +152,20 @@ class SIPClient:
                 )
             except Exception:
                 debug("BYE Answer failed falling back to server as target")
-                self.sendto(
-                    response, message.headers["Via"]["address"]
-                )
+                self.sendto(response, message.headers["Via"]["address"])
         elif message.method == "ACK":
             return
         elif message.method == "CANCEL":
             # TODO: If callCallback is None, the call doesn't exist, 481
             self.call_callback(message)  # type: ignore
             response = self.gen_ok(message)
-            self.sendto(
-                response, message.headers["Via"]["address"]
-            )
+            self.sendto(response, message.headers["Via"]["address"])
         elif message.method == "OPTIONS":
             if self.call_callback:
                 response = str(self.call_callback(message))
             else:
                 response = self._gen_options_response(message)
-            self.sendto(
-                response, message.headers["Via"]["address"]
-            )
+            self.sendto(response, message.headers["Via"]["address"])
         else:
             debug("TODO: Add 400 Error on non processable request")
 
@@ -204,13 +207,19 @@ class SIPClient:
             if self.out:
                 self.out.close()
 
-    def sendto(self, request: str, address = None) -> None:
+    def sendto(self, request: str, address=None) -> None:
         if address is None:
             address = (self.server, self.port)
         self.out.sendto(request, address)
         debug(f"SENT:\n{requet}\n")
 
-    def _gen_from_to(self, request: SIPMessage, hdr: str, tag: Optional[str] = None, dsthdr: Optional[str] = None) -> str:
+    def _gen_from_to(
+        self,
+        request: SIPMessage,
+        hdr: str,
+        tag: Optional[str] = None,
+        dsthdr: Optional[str] = None,
+    ) -> str:
         if dsthdr is None:
             dsthdr = hdr
         h = request.headers[hdr]
@@ -220,15 +229,15 @@ class SIPClient:
         if dn:
             ret = f'{dsthdr}: "{dn}"'
         else:
-            ret = f'{dsthdr}:'
+            ret = f"{dsthdr}:"
 
         if tag:
-            return f'{ret} <{uri}>;tag={tag}\r\n'
+            return f"{ret} <{uri}>;tag={tag}\r\n"
         else:
-            return f'{ret} <{uri}>\r\n'
+            return f"{ret} <{uri}>\r\n"
 
     def gen_user_agent(self) -> str:
-            return f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
+        return f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
 
     def gen_call_id(self) -> str:
         hash = hashlib.sha256(str(self.callID.next()).encode("utf8"))
@@ -842,11 +851,13 @@ class SIPClient:
 
         return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
-    def gen_message(self, number: str, body: str, ctype: str, branch: str, call_id: str) -> str:
+    def gen_message(
+        self, number: str, body: str, ctype: str, branch: str, call_id: str
+    ) -> str:
         msg = f"MESSAGE sip:{number}@{self.server} SIP/2.0\r\n"
         msg += (
-                f"Via: SIP/2.0/{self.transport_mode} "
-                + f"{self.bind_ip}:{self.bind_port};branch={branch}\r\n"
+            f"Via: SIP/2.0/{self.transport_mode} "
+            + f"{self.bind_ip}:{self.bind_port};branch={branch}\r\n"
         )
         msg += "Max-Forwards: 70\r\n"
         msg += f"To: <sip:{number}@{self.server}\r\n"
@@ -859,7 +870,9 @@ class SIPClient:
         msg += body
         return msg
 
-    def message(self, number: str, body: str, ctype: str = "text/plain") -> SIPMessage:
+    def message(
+        self, number: str, body: str, ctype: str = "text/plain"
+    ) -> SIPMessage:
         branch = "z0hG4bK" + self.gen_call_id()[0:25]
         call_id = self.gen_call_id()
         msg = self.gen_message(number, body, ctype, branch, call_id)
@@ -873,13 +886,17 @@ class SIPClient:
             self.parse_message(response)
             if response.status == SIPStatus(100):
                 continue
-            if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+            if response.status == SIPStatus(
+                401
+            ) or response.status == SIPStatus(407):
                 if auth:
                     debug("Auth Failure")
                     break
                 auth = True
                 auth = self.gen_auth_header(response, number)
-                msg = msg.replace("\r\nContent-Length", "\r\n{auth}Content-Length")
+                msg = msg.replace(
+                    "\r\nContent-Length", "\r\n{auth}Content-Length"
+                )
                 self.sendto(msg)
                 continue
             if response.status == SIPStatus.OK:
@@ -1005,9 +1022,7 @@ class SIPClient:
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
             regRequest = self.gen_register(response)
-            self.sendto(
-                regRequest
-            )
+            self.sendto(regRequest)
             ready = select.select([self.s], [], [], self.register_timeout)
             if ready[0]:
                 resp = self.s.recv(8192)

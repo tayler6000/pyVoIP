@@ -357,7 +357,6 @@ class SIPMessage:
         """
 
     def parse_header(self, header: str, data: str) -> None:
-
         if header in self.compact_key.keys():
             header = self.compact_key[header]
 
@@ -448,7 +447,11 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header in ("WWW-Authenticate", "Authorization", "Proxy-Authenticate"):
+        elif header in (
+            "WWW-Authenticate",
+            "Authorization",
+            "Proxy-Authenticate",
+        ):
             method = data.split(" ")[0]
             data = data.replace(f"{method} ", "")
             row_data = self.auth_match.findall(data)

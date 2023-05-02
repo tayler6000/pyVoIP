@@ -246,9 +246,7 @@ class VoIPCall:
         message = self.sip.gen_answer(
             request, self.session_id, m, self.sendmode
         )
-        self.sip.sendto(
-            message, self.request.headers["Via"][0]["address"]
-        )
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         for i in request.body["m"]:
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
@@ -263,9 +261,7 @@ class VoIPCall:
         message = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
-        self.sip.sendto(
-            message, self.request.headers["Via"][0]["address"]
-        )
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         self.state = CallState.ANSWERED
 
     def rtp_answered(self, request: SIP.SIPMessage) -> None:
@@ -373,9 +369,7 @@ class VoIPCall:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         message = self.sip.gen_busy(self.request)
-        self.sip.sendto(
-            message, self.request.headers["Via"][0]["address"]
-        )
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
@@ -537,9 +531,7 @@ class VoIPPhone:
             return  # Raise Error
         if self.callClass is None:
             message = self.sip.gen_busy(request)
-            self.sip.sendto(
-                message, request.headers["Via"][0]["address"]
-            )
+            self.sip.sendto(message, request.headers["Via"][0]["address"])
         else:
             debug("New call!")
             sess_id = None
@@ -549,9 +541,7 @@ class VoIPPhone:
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
-            self.sip.sendto(
-                message, request.headers["Via"][0]["address"]
-            )
+            self.sip.sendto(message, request.headers["Via"][0]["address"])
             call = self._create_Call(request, sess_id)
             try:
                 t = Timer(1, call.ringing, [request])
