@@ -409,7 +409,7 @@ class SIPMessage:
             data += f"{x}: {self.body[x]}\n"
         data += "\n"
         data += "Raw:\n"
-        data += self.raw.decode('utf8')
+        data += self.raw.decode("utf8")
 
         return data
 
@@ -436,7 +436,6 @@ class SIPMessage:
             )
 
     def parse_header(self, header: str, data: str) -> None:
-
         if header in self.compact_key.keys():
             header = self.compact_key[header]
 
@@ -510,7 +509,11 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header in ("WWW-Authenticate", "Authorization", "Proxy-Authenticate"):
+        elif header in (
+            "WWW-Authenticate",
+            "Authorization",
+            "Proxy-Authenticate",
+        ):
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
@@ -901,7 +904,7 @@ class SIPClient:
     def parse_message(self, message: SIPMessage) -> None:
         if message.type != SIPMessageType.MESSAGE:
             if (
-                   message.status == SIPStatus.OK
+                message.status == SIPStatus.OK
                 or message.status == SIPStatus.NOT_FOUND
                 or message.status == SIPStatus.SERVICE_UNAVAILABLE
                 or message.status == SIPStatus.PROXY_AUTHENTICATION_REQUIRED
@@ -909,12 +912,10 @@ class SIPClient:
                 or message.status == SIPStatus.BUSY_HERE
                 or message.status == SIPStatus.SESSION_PROGRESS
                 or message.status == SIPStatus.REQUEST_TERMINATED
-               ):
+            ):
                 if self.call_callback is not None:
                     self.call_callback(message)
-            elif (
-                message.status == SIPStatus.TRYING
-               ):
+            elif message.status == SIPStatus.TRYING:
                 pass
             else:
                 debug(
@@ -996,7 +997,7 @@ class SIPClient:
     def sendto(self, request, address=None) -> None:
         if address is None:
             address = (self.server, self.port)
-        self.out.sendto(request.encode('utf-8'), address)
+        self.out.sendto(request.encode("utf-8"), address)
         debug(f"SENT:\n{request}\n")
 
     def gen_call_id(self) -> str:
@@ -1019,8 +1020,13 @@ class SIPClient:
                 return tag
         return ""
 
-    def _gen_from_to(self, request: SIPMessage, hdr: str,
-                        tag: str = None, dsthdr: str = None) -> str:
+    def _gen_from_to(
+        self,
+        request: SIPMessage,
+        hdr: str,
+        tag: str = None,
+        dsthdr: str = None,
+    ) -> str:
         if dsthdr is None:
             dsthdr = hdr
         h = request.headers[hdr]
@@ -1028,7 +1034,7 @@ class SIPClient:
         if h["display-name"]:
             ret = f'{dsthdr}: "{h["display-name"]}" '
         else:
-            ret = f'{dsthdr}:'
+            ret = f"{dsthdr}:"
         if tag:
             return f'{ret} <{h["uri"]}>;tag={tag}\r\n'
         else:
@@ -1056,7 +1062,9 @@ class SIPClient:
 
         return response
 
-    def gen_auth(self, realm, uri, method, nonce, qop=None, nc=None, cnonce=None) -> bytes:
+    def gen_auth(
+        self, realm, uri, method, nonce, qop=None, nc=None, cnonce=None
+    ) -> bytes:
         HA1 = f"{self.username}:{realm}:{self.password}"
         HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
         HA2 = f"{method}:{uri}"
@@ -1074,10 +1082,10 @@ class SIPClient:
         return self.gen_auth(realm, uri, method, nonce)
 
     def gen_auth_header(self, response: SIPMessage, number: str) -> str:
-        qop = response.authentication.get('qop', None)
-        header = 'Authorization'
+        qop = response.authentication.get("qop", None)
+        header = "Authorization"
         if response.status == SIPStatus(407):
-            header = 'Proxy-Authorization'
+            header = "Proxy-Authorization"
         if not qop:
             uri = f"sip:{number}@{self.server}"
             authhash = self.gen_authorization(response, uri)
@@ -1105,11 +1113,13 @@ class SIPClient:
             )
         return auth
 
-    def gen_proxy_authorization(self, request: SIPMessage, uri: str, nc: str, cnonce: str) -> bytes:
+    def gen_proxy_authorization(
+        self, request: SIPMessage, uri: str, nc: str, cnonce: str
+    ) -> bytes:
         realm = request.authentication["realm"]
         method = request.headers["CSeq"]["method"]
         nonce = request.authentication["nonce"]
-        qop = request.authentication.get('qop', 'auth')
+        qop = request.authentication.get("qop", "auth")
         return self.gen_auth(realm, uri, method, nonce, qop, nc, cnonce)
 
     def gen_branch(self, length=32) -> str:
@@ -1439,14 +1449,14 @@ class SIPClient:
         return byeRequest
 
     def gen_bye(self, request: SIPMessage) -> str:
-        return self.gen_bye_cancel(request, 'BYE')
+        return self.gen_bye_cancel(request, "BYE")
 
     def gen_cancel(self, request: SIPMessage) -> str:
-        return self.gen_bye_cancel(request, 'CANCEL')
+        return self.gen_bye_cancel(request, "CANCEL")
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
-        to_raw = request.headers["To"]['raw']
+        to_raw = request.headers["To"]["raw"]
         t = to_raw.strip("<").strip(">")
         ackMessage = f"ACK {t} SIP/2.0\r\n"
         ackMessage += self._gen_response_via_header(request)
@@ -1514,11 +1524,10 @@ class SIPClient:
 
         debug(f"Received Response: {response.summary()}")
 
-        if (
-            response.status == SIPStatus(100)
-            or response.status == SIPStatus(180)
+        if response.status == SIPStatus(100) or response.status == SIPStatus(
+            180
         ):
-            debug('Invite status OK')
+            debug("Invite status OK")
             self.recvLock.release()
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
         ack = self.gen_ack(response)
@@ -1539,8 +1548,9 @@ class SIPClient:
 
         return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
-    def gen_message(self, number: str, body: str, ctype: str,
-                            branch: str, call_id: str) -> str:
+    def gen_message(
+        self, number: str, body: str, ctype: str, branch: str, call_id: str
+    ) -> str:
         msg = f"MESSAGE sip:{number}@{self.server} SIP/2.0\r\n"
         msg += (
             f"Via: SIP/2.0/UDP {self.bind_ip}:{self.bind_port};branch="
@@ -1558,8 +1568,9 @@ class SIPClient:
         msg += body
         return msg
 
-    def message(self, number: str, body: str,
-                        ctype: str = 'text/plain') -> SIPMessage:
+    def message(
+        self, number: str, body: str, ctype: str = "text/plain"
+    ) -> SIPMessage:
         branch = "z0hG4bK" + self.gen_call_id()[0:25]
         call_id = self.gen_call_id()
         msg = self.gen_message(number, body, ctype, branch, call_id)
@@ -1573,9 +1584,11 @@ class SIPClient:
             self.parse_message(response)
             if response.status == SIPStatus(100):
                 continue
-            if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+            if response.status == SIPStatus(
+                401
+            ) or response.status == SIPStatus(407):
                 if auth:
-                    debug('Auth failure')
+                    debug("Auth failure")
                     break
                 auth = True
                 auth = self.gen_auth_header(response, number)

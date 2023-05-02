@@ -375,9 +375,7 @@ class VoIPCall:
         del self.phone.calls[self.request.headers["Call-ID"]]
 
     def hangup(self) -> None:
-        if (
-            self.state != CallState.ANSWERED
-           ):
+        if self.state != CallState.ANSWERED:
             raise InvalidStateError("Call is not answered")
         for x in self.RTPClients:
             x.stop()
@@ -390,7 +388,7 @@ class VoIPCall:
         if (
             self.state != CallState.DIALING
             and self.state != CallState.PROGRESS
-           ):
+        ):
             raise InvalidStateError("Call is not dialing or in progress")
         for x in self.RTPClients:
             x.stop()
@@ -402,7 +400,7 @@ class VoIPCall:
             self.state == CallState.ANSWERED
             or self.state == CallState.PROGRESS
             or self.state == CallState.CANCELING
-           ):
+        ):
             for x in self.RTPClients:
                 x.stop()
             self.state = CallState.ENDED
@@ -575,7 +573,7 @@ class VoIPPhone:
             return
         # TODO: Somehow never is reached. Find out if you have a network
         # issue here or your invite is wrong.
-        if request.headers['CSeq']['method'] == 'CANCEL':
+        if request.headers["CSeq"]["method"] == "CANCEL":
             debug("Canceled")
             return
         else:
@@ -686,7 +684,9 @@ class VoIPPhone:
         self.sip.stop()
         self._status = PhoneStatus.INACTIVE
 
-    def call(self, number: str, media: Dict[int, RTP.PayloadType] = None) -> VoIPCall:
+    def call(
+        self, number: str, media: Dict[int, RTP.PayloadType] = None
+    ) -> VoIPCall:
         port = self.request_port()
         if media is None:
             media = {0: RTP.PayloadType.PCMU}
@@ -709,8 +709,9 @@ class VoIPPhone:
 
         return self.calls[call_id]
 
-    def message(self, number: str, body:str,
-                                ctype: str = 'text/plain') -> bool:
+    def message(
+        self, number: str, body: str, ctype: str = "text/plain"
+    ) -> bool:
         response = self.sip.message(number, body, ctype)
         return response and response.status == SIP.SIPStatus.OK
 
