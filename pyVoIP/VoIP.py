@@ -1,7 +1,7 @@
 from enum import Enum
 from pyVoIP import SIP, RTP
 from threading import Timer, Lock
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 import audioop
 import io
 import pyVoIP
@@ -37,7 +37,9 @@ class NoPortsAvailableError(Exception):
 class CallState(Enum):
     DIALING = "DIALING"
     RINGING = "RINGING"
+    PROGRESS = "PROGRESS"
     ANSWERED = "ANSWERED"
+    CANCELING = "CANCELING"
     ENDED = "ENDED"
 
 
@@ -243,9 +245,7 @@ class VoIPCall:
         message = self.sip.gen_answer(
             request, self.session_id, m, self.sendmode
         )
-        self.sip.out.sendto(
-            message.encode("utf8"), (self.phone.server, self.phone.port)
-        )
+        self.sip.sendto(message)
         for i in request.body["m"]:
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
@@ -260,15 +260,10 @@ class VoIPCall:
         message = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
-        self.sip.out.sendto(
-            message.encode("utf8"), (self.phone.server, self.phone.port)
-        )
+        self.sip.sendto(message)
         self.state = CallState.ANSWERED
 
-    def answered(self, request: SIP.SIPMessage) -> None:
-        if self.state != CallState.DIALING:
-            return
-
+    def rtp_answered(self, request: SIP.SIPMessage) -> None:
         for i in request.body["m"]:
             assoc = {}
             e = False
@@ -296,7 +291,20 @@ class VoIPCall:
             x.start()
         self.request.headers["Contact"] = request.headers["Contact"]
         self.request.headers["To"]["tag"] = request.headers["To"]["tag"]
+
+    def answered(self, request: SIP.SIPMessage) -> None:
+        if self.state == CallState.DIALING:
+            self.rtp_answered(request)
+        elif self.state != CallState.PROGRESS:
+            return
         self.state = CallState.ANSWERED
+
+    def progress(self, request: SIP.SIPMessage) -> None:
+        if self.state != CallState.DIALING:
+            return
+        self.request = request
+        self.rtp_answered(request)
+        self.state = CallState.PROGRESS
 
     def not_found(self, request: SIP.SIPMessage) -> None:
         if self.state != CallState.DIALING:
@@ -347,20 +355,29 @@ class VoIPCall:
         # also resets all other warnings.
         warnings.simplefilter("default")
 
+    def ringing(self, request: SIP.SIPMessage) -> None:
+        if self.state == CallState.RINGING:
+            self.deny()
+        else:
+            self.request = request
+
+    def busy(self, request: SIP.SIPMessage) -> None:
+        self.bye()
+
     def deny(self) -> None:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         message = self.sip.gen_busy(self.request)
-        self.sip.out.sendto(
-            message.encode("utf8"), (self.phone.server, self.phone.port)
-        )
+        self.sip.sendto(message)
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
         del self.phone.calls[self.request.headers["Call-ID"]]
 
     def hangup(self) -> None:
-        if self.state != CallState.ANSWERED:
+        if (
+            self.state != CallState.ANSWERED
+           ):
             raise InvalidStateError("Call is not answered")
         for x in self.RTPClients:
             x.stop()
@@ -369,8 +386,23 @@ class VoIPCall:
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
 
+    def cancel(self) -> None:
+        if (
+            self.state != CallState.DIALING
+            and self.state != CallState.PROGRESS
+           ):
+            raise InvalidStateError("Call is not dialing or in progress")
+        for x in self.RTPClients:
+            x.stop()
+        self.sip.cancel(self.request)
+        self.state = CallState.CANCELING
+
     def bye(self) -> None:
-        if self.state == CallState.ANSWERED:
+        if (
+            self.state == CallState.ANSWERED
+            or self.state == CallState.PROGRESS
+            or self.state == CallState.CANCELING
+           ):
             for x in self.RTPClients:
                 x.stop()
             self.state = CallState.ENDED
@@ -404,9 +436,10 @@ class VoIPPhone:
         bind_ip="0.0.0.0",
         bind_port=5060,
         transport_mode=SIP.TransportMode.UDP,
-        call_callback: Optional[Callable[["VoIPCall"], None]] = None,
         rtp_port_low=10000,
         rtp_port_high=20000,
+        callClass: Type[VoIPCall] = None,
+        sipClass: Type[SIP.SIPClient] = None,
     ):
         if rtp_port_low > rtp_port_high:
             raise InvalidRangeError(
@@ -417,6 +450,9 @@ class VoIPPhone:
         self.rtp_port_high = rtp_port_high
         self.NSD = False
 
+        self.callClass = not callClass is None and callClass or VoIPCall
+        self.sipClass = not sipClass is None and sipClass or SIP.SIPClient
+
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
         self.session_ids: List[int] = []
@@ -426,7 +462,6 @@ class VoIPPhone:
         self.bind_ip = bind_ip
         self.username = username
         self.password = password
-        self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
         self.transport_mode = transport_mode
 
@@ -438,7 +473,7 @@ class VoIPPhone:
         self.threads: List[Timer] = []
         # Allows you to find call ID based off thread.
         self.threadLookup: Dict[Timer, str] = {}
-        self.sip = SIP.SIPClient(
+        self.sip = self.sipClass(
             server,
             port,
             username,
@@ -466,6 +501,14 @@ class VoIPPhone:
                 self._callback_RESP_NotFound(request)
             elif request.status == SIP.SIPStatus.SERVICE_UNAVAILABLE:
                 self._callback_RESP_Unavailable(request)
+            elif request.status == SIP.SIPStatus.RINGING:
+                self._callback_RESP_Ringing(request)
+            elif request.status == SIP.SIPStatus.SESSION_PROGRESS:
+                self._callback_RESP_Progress(request)
+            elif request.status == SIP.SIPStatus.BUSY_HERE:
+                self._callback_RESP_Busy(request)
+            elif request.status == SIP.SIPStatus.REQUEST_TERMINATED:
+                self._callback_RESP_Terminated(request)
 
     def get_status(self) -> PhoneStatus:
         return self._status
@@ -484,11 +527,9 @@ class VoIPPhone:
             if self.calls[call_id].state != CallState.RINGING:
                 self.calls[call_id].renegotiate(request)
             return  # Raise Error
-        if self.call_callback is None:
+        if self.callClass is None:
             message = self.sip.gen_busy(request)
-            self.sip.out.sendto(
-                message.encode("utf8"), (self.server, self.port)
-            )
+            self.sip.sendto(message)
         else:
             debug("New call!")
             sess_id = None
@@ -498,21 +539,17 @@ class VoIPPhone:
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
-            self.sip.out.sendto(
-                message.encode("utf8"), (self.server, self.port)
-            )
-            self._create_Call(request, sess_id)
+            self.sip.sendto(message)
+            call = self._create_Call(request, sess_id)
             try:
-                t = Timer(1, self.call_callback, [self.calls[call_id]])
+                t = Timer(1, call.ringing, [request])
                 t.name = f"Phone Call: {call_id}"
                 t.start()
                 self.threads.append(t)
                 self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.gen_busy(request)
-                self.sip.out.sendto(
-                    message.encode("utf8"), (self.server, self.port)
-                )
+                self.sip.sendto(message)
                 raise
 
     def _callback_MSG_Bye(self, request: SIP.SIPMessage) -> None:
@@ -525,23 +562,63 @@ class VoIPPhone:
     def _callback_MSG_Options(self, request: SIP.SIPMessage) -> str:
         debug("Options recieved")
         response = self.sip.gen_busy(request)
-        if self.call_callback:
+        if self.callClass:
             response = response.replace("486 Busy Here", "200 OK")
             # TODO: Remove warning, implement RFC 3264
         return response
 
     def _callback_RESP_OK(self, request: SIP.SIPMessage) -> None:
-        debug("OK recieved")
+        debug("OK received")
         call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unknown/No call")
             return
         # TODO: Somehow never is reached. Find out if you have a network
         # issue here or your invite is wrong.
-        self.calls[call_id].answered(request)
-        debug("Answered")
+        if request.headers['CSeq']['method'] == 'CANCEL':
+            debug("Canceled")
+            return
+        else:
+            self.calls[call_id].answered(request)
+            debug("Answered")
         ack = self.sip.gen_ack(request)
-        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
+        self.sip.sendto(ack)
+
+    def _callback_RESP_Ringing(self, request: SIP.SIPMessage) -> None:
+        debug("Ringing received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+            return
+        self.calls[call_id].ringing(request)
+
+    def _callback_RESP_Progress(self, request: SIP.SIPMessage) -> None:
+        debug("Session progress received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+            return
+        self.calls[call_id].progress(request)
+
+    def _callback_RESP_Busy(self, request: SIP.SIPMessage) -> None:
+        debug("Busy received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+            return
+        self.calls[call_id].busy(request)
+        ack = self.sip.gen_ack(request)
+        self.sip.sendto(ack)
+
+    def _callback_RESP_Terminated(self, request: SIP.SIPMessage) -> None:
+        debug("Request terminated received")
+        call_id = request.headers["Call-ID"]
+        if call_id not in self.calls:
+            debug("Unknown/No call")
+        else:
+            self.calls[call_id].bye()
+        ack = self.sip.gen_ack(request)
+        self.sip.sendto(ack)
 
     def _callback_RESP_NotFound(self, request: SIP.SIPMessage) -> None:
         debug("Not Found recieved, invalid number called?")
@@ -555,13 +632,13 @@ class VoIPPhone:
         self.calls[call_id].not_found(request)
         debug("Terminating Call")
         ack = self.sip.gen_ack(request)
-        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
+        self.sip.sendto(ack)
 
     def _callback_RESP_Unavailable(self, request: SIP.SIPMessage) -> None:
         debug("Service Unavailable recieved")
         call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
-            debug("Unkown call")
+            debug("Unknown call")
             debug(
                 "TODO: Add 481 here as server is probably waiting for "
                 + "an ACK"
@@ -569,15 +646,15 @@ class VoIPPhone:
         self.calls[call_id].unavailable(request)
         debug("Terminating Call")
         ack = self.sip.gen_ack(request)
-        self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
+        self.sip.sendto(ack)
 
-    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> None:
+    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> VoIPCall:
         """
         Create VoIP call object. Should be separated to enable better
         subclassing.
         """
         call_id = request.headers["Call-ID"]
-        self.calls[call_id] = VoIPCall(
+        self.calls[call_id] = self.callClass(
             self,
             CallState.RINGING,
             request,
@@ -585,6 +662,7 @@ class VoIPPhone:
             self.bind_ip,
             sendmode=self.recvmode,
         )
+        return self.calls[call_id]
 
     def start(self) -> None:
         self._status = PhoneStatus.REGISTERING
@@ -608,14 +686,18 @@ class VoIPPhone:
         self.sip.stop()
         self._status = PhoneStatus.INACTIVE
 
-    def call(self, number: str) -> VoIPCall:
+    def call(self, number: str, media: Dict[int, RTP.PayloadType] = None) -> VoIPCall:
         port = self.request_port()
+        if media is None:
+            media = {0: RTP.PayloadType.PCMU}
+        # must have
+        media[101] = RTP.PayloadType.EVENT
         medias = {}
-        medias[port] = {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}
+        medias[port] = media
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
-        self.calls[call_id] = VoIPCall(
+        self.calls[call_id] = self.callClass(
             self,
             CallState.DIALING,
             request,
@@ -626,6 +708,11 @@ class VoIPPhone:
         )
 
         return self.calls[call_id]
+
+    def message(self, number: str, body:str,
+                                ctype: str = 'text/plain') -> bool:
+        response = self.sip.message(number, body, ctype)
+        return response and response.status == SIP.SIPStatus.OK
 
     def request_port(self, blocking=True) -> int:
         ports_available = [

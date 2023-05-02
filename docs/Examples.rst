@@ -6,7 +6,7 @@ Here we will go over a few basic phone setups.
 Setup
 *****
 
-PyVoIP uses callback functions to initiate phone calls.  In the example below, our callback function is named ``answer``.  The callback takes one argument, which is a :ref:`VoIPCall` instance.
+PyVoIP uses :ref:`VoIPPhone` child class to initiate phone calls.  In the example below, our ringing function is named ``Call.ringing``.
 
 We are also importing :ref:`VoIPPhone` and :ref:`InvalidStateError<invalidstateerror>`.  VoIPPhone is the main class for our `softphone <https://en.wikipedia.org/wiki/Softphone>`_.  An InvalidStateError is thrown when you try to perform an impossible command.  For example, denying the call when the phone is already answered, answering when it's already answered, etc.
 
@@ -14,17 +14,19 @@ The following will create a phone that answers and automatically hangs up:
 
 .. code-block:: python
    
-  from pyVoIP.VoIP import VoIPPhone, InvalidStateError
+  from pyVoIP.VoIP import VoIPPhone, VoIPCall, InvalidStateError
 
-  def answer(call):
-      try:
-          call.answer()
-          call.hangup()
-      except InvalidStateError:
-          pass
-  
+  class Call(VoIPCall):
+
+      def ringing(self, invite_request):
+          try:
+              self.answer()
+              self.hangup()
+          except InvalidStateError:
+              pass
+
   if __name__ == "__main__":
-      phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, myIP=<Your computer's local IP>, callCallback=answer)
+      phone = VoIPPhone(<SIP server IP>, <SIP server port>, <SIP server username>, <SIP server password>, bind_ip=<Your computer's local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
@@ -36,33 +38,34 @@ Let's say you want to make a phone that when you call it, it plays an announceme
 
 .. code-block:: python
 
-  from pyVoIP.VoIP import VoIPPhone, InvalidStateError, CallState
+  from pyVoIP.VoIP import VoIPPhone, VoIPCall, InvalidStateError, CallState
   import time
   import wave
-  
-  def answer(call):
-      try:
-          f = wave.open('announcment.wav', 'rb')
-          frames = f.getnframes()
-          data = f.readframes(frames)
-          f.close()
-      
-          call.answer()
-          call.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
-      
-          stop = time.time() + (frames / 8000)  # frames/8000 is the length of the audio in seconds. 8000 is the hertz of PCMU.
-      
-          while time.time() <= stop and call.state == CallState.ANSWERED:
-              time.sleep(0.1)
-          call.hangup()
-      except InvalidStateError:
-          pass
-      except:
-          call.hangup()
-  
-      
+
+  class Call(VoIPCall):
+
+      def ringing(self, invite_request):
+          try:
+              f = wave.open('announcment.wav', 'rb')
+              frames = f.getnframes()
+              data = f.readframes(frames)
+              f.close()
+          
+              call.answer()
+              call.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
+          
+              stop = time.time() + (frames / 8000)  # frames/8000 is the length of the audio in seconds. 8000 is the hertz of PCMU.
+          
+              while time.time() <= stop and call.state == CallState.ANSWERED:
+                  time.sleep(0.1)
+              call.hangup()
+          except InvalidStateError:
+              pass
+          except:
+              call.hangup()
+
   if __name__ == "__main__":
-      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, myIP=<Your computers local IP>, callCallback=answer)
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
@@ -87,39 +90,76 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
 
 .. code-block:: python
 
-  from pyVoIP.VoIP import VoIPPhone, InvalidStateError, CallState
+  from pyVoIP.VoIP import VoIPPhone, VoIPCall, InvalidStateError, CallState
   import time
   import wave
   
-  def answer(call):
-      try:
-          f = wave.open('prompt.wav', 'rb')
-          frames = f.getnframes()
-          data = f.readframes(frames)
-          f.close()
-      
-          call.answer()
-          call.write_audio(data)
-      
-          while call.state == CallState.ANSWERED:
-              dtmf = call.get_dtmf()
-              if dtmf == "1":
-                  # Do something
-                  call.hangup()
-              elif dtmf == "2":
-                  # Do something else
-                  call.hangup()
-              time.sleep(0.1)
-      except InvalidStateError:
-          pass
-      except:
-          call.hangup()
-      
+  class Call(VoIPCall):
+
+      def ringing(self, invite_request):
+          try:
+              f = wave.open('prompt.wav', 'rb')
+              frames = f.getnframes()
+              data = f.readframes(frames)
+              f.close()
+          
+              call.answer()
+              call.write_audio(data)
+          
+              while call.state == CallState.ANSWERED:
+                  dtmf = call.get_dtmf()
+                  if dtmf == "1":
+                      # Do something
+                      call.hangup()
+                  elif dtmf == "2":
+                      # Do something else
+                      call.hangup()
+                  time.sleep(0.1)
+          except InvalidStateError:
+              pass
+          except:
+              call.hangup()
+
   if __name__ == '__main__':
-      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, myIP=<Your computers local IP>, callCallback=answer)
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
 
 Please note that ``get_dtmf()`` is actually ``get_dtmf(length=1)``, and as it is technically an ``io.StringBuffer()``, it will return ``""`` instead of ``None``.  This may be important if you wanted an 'if anything else, do that' clause.  Lastly, VoIPCall stores all DTMF keys pressed since the call was established; meaning, users can press any key they want before the prompt even finishes, or may press a wrong key before the prompt even starts.
 
+Call state handling for outgoing calls
+**************************************
+
+We can use the following code to handle various states for the outgoing calls:
+
+.. code-block:: python
+
+  from pyVoIP.VoIP import VoIPPhone, VoIPCall, InvalidStateError, CallState
+  import time
+  import wave
+
+  class Call(VoIPCall):
+
+      def progress(self, request):
+	  print('Progress')
+	  super().progress(request)
+
+      def busy(self, request):
+          print('Call ended - callee is busy')
+	  super().progress(request)
+
+      def answered(self, request):
+	  print('Answered')
+          super().answered()
+
+      def bye(self):
+          print('Bye')
+          super().bye()
+
+  if __name__ == '__main__':
+      phone = VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, bind_ip=<Your computers local IP>, callClass=Call)
+      phone.start()
+      phone.call(<Phone Number>)
+      input('Press enter to disable the phone\n')
+      phone.stop()
