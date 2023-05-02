@@ -448,11 +448,11 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization":
+        elif header in ("WWW-Authenticate", "Authorization", "Proxy-Authenticate"):
             method = data.split(" ")[0]
             data = data.replace(f"{method} ", "")
             row_data = self.auth_match.findall(data)
-            header_data: Dict[str, Any] = {"method": method}
+            header_data: Dict[str, Any] = {"header": header, "method": method}
             for var, data in row_data:
                 if var == "userhash":
                     header_data[var] = (
