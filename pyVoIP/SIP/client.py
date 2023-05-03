@@ -211,7 +211,7 @@ class SIPClient:
         if address is None:
             address = (self.server, self.port)
         self.out.sendto(request, address)
-        debug(f"SENT:\n{requet}\n")
+        debug(f"SENT:\n{request}\n")
 
     def _gen_from_to(
         self,
@@ -583,10 +583,11 @@ class SIPClient:
         return okResponse
 
     def gen_ringing(self, request: SIPMessage) -> str:
+        tag = self.gen_tag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._gen_response_via_header(request)
         regRequest += f"From: {request.headers['From']['raw']}\r\n"
-        regRequest += self._gen_from_to(request, "To", self.gen_tag())
+        regRequest += self._gen_from_to(request, "To", tag)
         regRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         regRequest += (
             f"CSeq: {request.headers['CSeq']['check']} "

@@ -450,8 +450,8 @@ class VoIPPhone:
         self.rtp_port_high = rtp_port_high
         self.NSD = False
 
-        self.callClass = not callClass is None and callClass or VoIPCall
-        self.sipClass = not sipClass is None and sipClass or SIP.SIPClient
+        self.callClass = callClass is not None and callClass or VoIPCall
+        self.sipClass = sipClass is not None and sipClass or SIP.SIPClient
 
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
@@ -703,10 +703,6 @@ class VoIPPhone:
         payload_types: Optional[List[RTP.PayloadType]] = None,
     ) -> VoIPCall:
         port = self.request_port()
-        if media is None:
-            media = {0: RTP.PayloadType.PCMU}
-        # must have
-        media[101] = RTP.PayloadType.EVENT
         medias = {}
         if not payload_types:
             payload_types = [RTP.PayloadType.PCMU, RTP.PayloadType.EVENT]
