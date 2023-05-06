@@ -30,5 +30,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e . -r requirements-test.txt
+      - name: Start Docker
+        run: |
+          docker build docker -t pyvoip/tests
+          docker run -d -p 5060:5060/udp pyvoip/tests
       - name: pytest
-        run: pytest
+        run: pytest --check-func
