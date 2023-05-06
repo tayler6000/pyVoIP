@@ -280,7 +280,7 @@ class SIPMessageType(IntEnum):
         obj._value_ = value
         return obj
 
-    MESSAGE = 1
+    REQUEST = 1
     RESPONSE = 0
 
 
@@ -347,8 +347,8 @@ class SIPMessage:
             self.type = SIPMessageType.RESPONSE
             self.parse_sip_response(data)
         else:  # elif check in self.SIPCompatibleMethods:
-            self.type = SIPMessageType.MESSAGE
-            self.parse_sip_message(data)
+            self.type = SIPMessageType.REQUEST
+            self.parse_sip_request(data)
         """
         else:
             raise SIPParseError(
@@ -440,13 +440,13 @@ class SIPMessage:
             }
         elif header == "CSeq":
             self.headers[header] = {
-                "check": data.split(" ")[0],
+                "check": int(data.split(" ")[0]),
                 "method": data.split(" ")[1],
             }
         elif header == "Allow" or header == "Supported":
             self.headers[header] = data.split(", ")
-        elif header == "Content-Length":
-            self.headers[header] = int(data)
+        elif header == "Call-ID":
+            self.headers[header] = data
         elif header in (
             "WWW-Authenticate",
             "Authorization",
@@ -472,7 +472,10 @@ class SIPMessage:
             self.headers[header] = header_data
             self.authentication = header_data
         else:
-            self.headers[header] = data
+            try:
+                self.headers[header] = int(data)
+            except ValueError:
+                self.headers[header] = data
 
     def parse_body(self, header: str, data: str) -> None:
         if "Content-Encoding" in self.headers:
@@ -713,7 +716,7 @@ class SIPMessage:
                 self.body[header] = data
 
         else:
-            self.body[header] = data
+            self.body["content"] = data
 
     @staticmethod
     def parse_raw_header(
@@ -736,14 +739,17 @@ class SIPMessage:
 
     @staticmethod
     def parse_raw_body(
-        body: bytes, handle: Callable[[str, str], None]
+        body: bytes, ctype: str, handle: Callable[[str, str], None]
     ) -> None:
         if len(body) > 0:
-            body_raw = body.split(b"\r\n")
-            for x in body_raw:
-                i = str(x, "utf8").split("=")
-                if i != [""]:
-                    handle(i[0], i[1])
+            if ctype == "application/sdp":
+                body_raw = body.split(b"\r\n")
+                for x in body_raw:
+                    i = str(x, "utf8").split("=")
+                    if i != [""]:
+                        handle(i[0], i[1])
+            else:
+                handle("", body)
 
     def parse_sip_response(self, data: bytes) -> None:
         headers, body = data.split(b"\r\n\r\n")
@@ -758,9 +764,13 @@ class SIPMessage:
 
         self.parse_raw_header(headers_raw, self.parse_header)
 
-        self.parse_raw_body(body, self.parse_body)
+        self.parse_raw_body(
+            body,
+            self.headers.get("Content-Type", "text/plain"),
+            self.parse_body,
+        )
 
-    def parse_sip_message(self, data: bytes) -> None:
+    def parse_sip_request(self, data: bytes) -> None:
         headers, body = data.split(b"\r\n\r\n")
 
         headers_raw = headers.split(b"\r\n")
@@ -773,4 +783,8 @@ class SIPMessage:
 
         self.parse_raw_header(headers_raw, self.parse_header)
 
-        self.parse_raw_body(body, self.parse_body)
+        self.parse_raw_body(
+            body,
+            self.headers.get("Content-Type", "text/plain"),
+            self.parse_body,
+        )

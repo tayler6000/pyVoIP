@@ -107,7 +107,7 @@ class SIPClient:
             self.recvLock.release()
 
     def parse_message(self, message: SIPMessage) -> None:
-        if message.type != SIPMessageType.MESSAGE:
+        if message.type != SIPMessageType.REQUEST:
             if message.status in (
                 SIPStatus.OK,
                 SIPStatus.NOT_FOUND,
@@ -500,9 +500,9 @@ class SIPClient:
         subRequest += self._gen_user_agent()
         subRequest += f"Expires: {self.default_expires * 2}\r\n"
         subRequest += "Event: message-summary\r\n"
-        subRequest += "Accept: application/simple-message-summary"
-        subRequest += "Content-Length: 0"
-        subRequest += "\r\n\r\n"
+        subRequest += "Accept: application/simple-message-summary\r\n"
+        subRequest += "Content-Length: 0\r\n"
+        subRequest += "\r\n"
 
         return subRequest
 
@@ -861,12 +861,14 @@ class SIPClient:
             + f"{self.bind_ip}:{self.bind_port};branch={branch}\r\n"
         )
         msg += "Max-Forwards: 70\r\n"
-        msg += f"To: <sip:{number}@{self.server}\r\n"
-        msg += f"From: <sip:{self.username}@{self.bind_ip}>;tag={self.gen_tag()}\r\n"
+        msg += f"To: <sip:{number}@{self.server}>\r\n"
+        msg += (
+            f"From: <sip:{self.user}@{self.bind_ip}>;tag={self.gen_tag()}\r\n"
+        )
         msg += f"Call-ID: {call_id}\r\n"
         msg += f"CSeq: {self.messageCounter.next()} MESSAGE\r\n"
         msg += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
-        msg += f"Content-Type: {ctype}"
+        msg += f"Content-Type: {ctype}\r\n"
         msg += f"Content-Length: {len(body)}\r\n\r\n"
         msg += body
         return msg
