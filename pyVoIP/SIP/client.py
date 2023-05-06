@@ -210,7 +210,7 @@ class SIPClient:
     def sendto(self, request: str, address=None) -> None:
         if address is None:
             address = (self.server, self.port)
-        self.out.sendto(request, address)
+        self.out.sendto(request.encode("utf8"), address)
         debug(f"SENT:\n{request}\n")
 
     def _gen_from_to(
@@ -236,7 +236,7 @@ class SIPClient:
         else:
             return f"{ret} <{uri}>\r\n"
 
-    def gen_user_agent(self) -> str:
+    def _gen_user_agent(self) -> str:
         return f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
 
     def gen_call_id(self) -> str:
