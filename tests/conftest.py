@@ -11,5 +11,9 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     config.addinivalue_line("markers", "tcp: mark test as uses TCP")
     config.addinivalue_line("markers", "udp: mark test as uses UDP")
-    config.addinivalue_line("markers", "registration: mark test as attempts to register")
-    config.addinivalue_line("markers", "calling: mark test as attempts to make calls")
+    config.addinivalue_line(
+        "markers", "registration: mark test as attempts to register"
+    )
+    config.addinivalue_line(
+        "markers", "calling: mark test as attempts to make calls"
+    )

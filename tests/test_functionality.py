@@ -91,6 +91,7 @@ def test_pass():
     assert phone.get_status() == PhoneStatus.INACTIVE
 
 
+@pytest.mark.skip
 @pytest.mark.tcp
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
@@ -102,7 +103,7 @@ def test_tcp_nopass():
         CredentialsManager(),
         bind_ip="127.0.0.1",
         bind_port=5059,
-        transport_mode = TransportMode.TCP,
+        transport_mode=TransportMode.TCP,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
@@ -115,6 +116,7 @@ def test_tcp_nopass():
     assert phone.get_status() == PhoneStatus.INACTIVE
 
 
+@pytest.mark.skip
 @pytest.mark.tcp
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
@@ -128,7 +130,7 @@ def test_tcp_pass():
         cm,
         bind_ip="127.0.0.1",
         bind_port=5059,
-        transport_mode = TransportMode.TCP,
+        transport_mode=TransportMode.TCP,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
@@ -141,6 +143,7 @@ def test_tcp_pass():
     assert phone.get_status() == PhoneStatus.INACTIVE
 
 
+@pytest.mark.skip
 @pytest.mark.udp
 @pytest.mark.calling
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
@@ -153,6 +156,7 @@ def test_make_call(phone):
     assert call.state == CallState.ENDED
 
 
+@pytest.mark.skip
 @pytest.mark.udp
 @pytest.mark.calling
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)

@@ -1,5 +1,5 @@
 from enum import Enum
-from pyVoIP import SIP, RTP, sock
+from pyVoIP import SIP, RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.sock.transport import TransportMode
 from threading import Timer, Lock
