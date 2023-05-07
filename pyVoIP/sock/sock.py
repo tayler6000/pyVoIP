@@ -310,12 +310,18 @@ class VoIPSocket(threading.Thread):
             self._listen()
         while not self.SD:
             if self.mode == TransportMode.UDP:
-                data = self.s.recv(8192)
+                try:
+                    data = self.s.recv(8192)
+                except OSError:
+                    continue
                 message = SIPMessage(data)
                 debug("\n\nReceived UDP Message:")
                 debug(message.summary())
             else:
-                conn, addr = self.s.accept()
+                try:
+                    conn, addr = self.s.accept()
+                except OSError:
+                    continue
                 debug(f"Received new {self.mode} connection from {addr}.")
                 data = conn.recv(8192)
                 message = SIPMessage(data)
