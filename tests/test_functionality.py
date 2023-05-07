@@ -91,14 +91,13 @@ def test_pass():
     assert phone.get_status() == PhoneStatus.INACTIVE
 
 
-@pytest.mark.skip
 @pytest.mark.tcp
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tcp_nopass():
     phone = VoIPPhone(
         "127.0.0.1",
-        5060,
+        5061,
         "nopass",
         CredentialsManager(),
         bind_ip="127.0.0.1",
@@ -116,7 +115,6 @@ def test_tcp_nopass():
     assert phone.get_status() == PhoneStatus.INACTIVE
 
 
-@pytest.mark.skip
 @pytest.mark.tcp
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
@@ -125,7 +123,7 @@ def test_tcp_pass():
     cm.add("pass", "Testing123!")
     phone = VoIPPhone(
         "127.0.0.1",
-        5060,
+        5061,
         "pass",
         cm,
         bind_ip="127.0.0.1",

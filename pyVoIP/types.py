@@ -3,6 +3,11 @@ import socket
 import ssl
 
 
+TFC_HEADER = Dict[
+    str, Union[str, int]
+]  # To From and Contact SIPMessage headers
+
+
 SOCKETS = Union[socket.socket, ssl.SSLSocket]
 
 

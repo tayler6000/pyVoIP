@@ -322,3 +322,111 @@ import pytest
 def test_sip_headers(packet, expected):
     message = SIPMessage(packet)
     assert message.headers == expected
+
+
+@pytest.mark.parametrize(
+    "packet,expected",
+    [
+        (
+            b"""INVITE sip:bob@biloxi.com SIP/2.0\r\nVia: SIP/2.0/UDP pc33.atlanta.com;branch=z9hG4bK776asdhds\r\nMax-Forwards: 70\r\nTo: Bob <sip:bob@biloxi.com>\r\nFrom: Alice <sip:alice@atlanta.com>;tag=1928301774\r\nCall-ID: a84b4c76e66710@pc33.atlanta.com\r\nCSeq: 314159 INVITE\r\nContact: <sip:alice@pc33.atlanta.com>\r\nContent-Type: application/sdp\r\nContent-Length: 142\r\n\r\n""",
+            {
+                "raw": "sip:bob@biloxi.com",
+                "tag": "",
+                "uri": "sip:bob@biloxi.com",
+                "uri-type": "sip",
+                "user": "bob",
+                "password": "",
+                "display-name": "",
+                "host": "biloxi.com",
+                "port": 5060,
+            },
+        ),
+        (
+            b"""ACK sip:bob@biloxi.com SIP/2.0\r\nVia: SIP/2.0/UDP pc33.atlanta.com;branch=z9hG4bKkjshdyff\r\nTo: Bob <sip:bob@biloxi.com>;tag=99sa0xk\r\nFrom: Alice <sip:alice@atlanta.com>;tag=88sja8x\r\nMax-Forwards: 70\r\nCall-ID: 987asjd97y7atg\r\nCSeq: 986759 ACK\r\n\r\n""",
+            {
+                "raw": "sip:bob@biloxi.com",
+                "tag": "",
+                "uri": "sip:bob@biloxi.com",
+                "uri-type": "sip",
+                "user": "bob",
+                "password": "",
+                "display-name": "",
+                "host": "biloxi.com",
+                "port": 5060,
+            },
+        ),
+        (
+            b"BYE sip:alice@pc33.atlanta.com SIP/2.0\r\nVia: SIP/2.0/UDP 192.0.2.4;branch=z9hG4bKnashds10\r\nMax-Forwards: 70\r\nFrom: Bob <sip:bob@biloxi.com>;tag=a6c85cf\r\nTo: Alice <sip:alice@atlanta.com>;tag=1928301774\r\nCall-ID: a84b4c76e66710\r\nCSeq: 231 BYE\r\nContent-Length: 0\r\n\r\n",
+            {
+                "raw": "sip:alice@pc33.atlanta.com",
+                "tag": "",
+                "uri": "sip:alice@pc33.atlanta.com",
+                "uri-type": "sip",
+                "user": "alice",
+                "password": "",
+                "display-name": "",
+                "host": "pc33.atlanta.com",
+                "port": 5060,
+            },
+        ),
+        (
+            b"CANCEL sip:123456789@sample.pstn.ie1.twilio.com SIP/2.0\r\nCSeq: 969240 CANCEL\r\nCall-ID: 284466\r\nFrom: <sip:test@sample.pstn.ie1.twilio.com>;tag=168502\r\nTo: <sip:123456789@sample.pstn.ie1.twilio.com>\r\nVia: SIP/2.0/TCP 192.168.61.4:61244;branch=z9hG4bK847573\r\nContent-Length: 0\r\n\r\n",
+            {
+                "raw": "sip:123456789@sample.pstn.ie1.twilio.com",
+                "tag": "",
+                "uri": "sip:123456789@sample.pstn.ie1.twilio.com",
+                "uri-type": "sip",
+                "user": "123456789",
+                "password": "",
+                "display-name": "",
+                "host": "sample.pstn.ie1.twilio.com",
+                "port": 5060,
+            },
+        ),
+        (
+            b"""REGISTER sip:127.0.0.1 SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5059;branch=z9hG4bK30af91ecac014a5b957bcb607;rport\r\nFrom: "pass" <sip:pass@127.0.0.1>;tag=85147370\r\nTo: "pass" <sip:pass@127.0.0.1>\r\nCall-ID: 6b86b273ff34fce19d6b804eff5a3f57@127.0.0.1:5059\r\nCSeq: 1 REGISTER\r\nContact: <sip:pass@127.0.0.1:5059;transport=UDP>;+sip.instance="<urn:uuid:5BEB99C2-D319-4B2C-8BD3-6F71796E9E07>"\r\nAllow: INVITE, ACK, BYE, CANCEL, OPTIONS\r\nMax-Forwards: 70\r\nAllow-Events: org.3gpp.nwinitdereg\r\nUser-Agent: pyVoIP 2.0.0\r\nExpires: 120\r\nContent-Length: 0\r\n\r\n""",
+            {
+                "raw": "sip:127.0.0.1",
+                "tag": "",
+                "uri": "sip:127.0.0.1",
+                "uri-type": "sip",
+                "user": "",
+                "password": "",
+                "display-name": "",
+                "host": "127.0.0.1",
+                "port": 5060,
+            },
+        ),
+        (
+            b"""SUBSCRIBE sip:pass@127.0.0.1 SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5059;branch=z9hG4bK24bb16adff7945d1a7b0da37c;rport\r\nFrom: "pass" <sip:pass@127.0.0.1>;tag=46c3691d\r\nTo: <sip:pass@127.0.0.1>\r\nCall-ID: 6b86b273ff34fce19d6b804eff5a3f57@0.0.0.0:5060\r\nCSeq: 1 SUBSCRIBE\r\nContact: <sip:pass@127.0.0.1:5059;transport=UDP>;+sip.instance="<urn:uuid:673FA933-7448-440B-AE08-969D75EB7AC3>"\r\nMax-Forwards: 70\r\nUser-Agent: pyVoIP 2.0.0\r\nExpires: 240\r\nEvent: message-summary\r\nAccept: application/simple-message-summary\r\nContent-Length: 0\r\n\r\n""",
+            {
+                "raw": "sip:pass@127.0.0.1",
+                "tag": "",
+                "uri": "sip:pass@127.0.0.1",
+                "uri-type": "sip",
+                "user": "pass",
+                "password": "",
+                "display-name": "",
+                "host": "127.0.0.1",
+                "port": 5060,
+            },
+        ),
+        (
+            b"MESSAGE sip:456@127.0.0.1 SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5059;branch=bb\r\nMax-Forwards: 70\r\nTo: <sip:456@127.0.0.1>\r\nFrom: <sip:pass@127.0.0.1>;tag=113bdaff\r\nCall-ID: cc\r\nCSeq: 1 MESSAGE\r\nAllow: INVITE, ACK, BYE, CANCEL, OPTIONS\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\n789",
+            {
+                "raw": "sip:456@127.0.0.1",
+                "tag": "",
+                "uri": "sip:456@127.0.0.1",
+                "uri-type": "sip",
+                "user": "456",
+                "password": "",
+                "display-name": "",
+                "host": "127.0.0.1",
+                "port": 5060,
+            },
+        ),
+    ],
+)
+def test_sip_to(packet, expected):
+    message = SIPMessage(packet)
+    assert message.to == expected

@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 from pyVoIP import regex
 from pyVoIP.SIP.error import SIPParseError
+from pyVoIP.types import TFC_HEADER
 from typing import Any, Callable, Dict, List, Optional, Union
 import pyVoIP
 
@@ -288,8 +289,9 @@ class SIPMessage:
     def __init__(self, data: bytes):
         self.SIPCompatibleVersions = pyVoIP.SIPCompatibleVersions
         self.SIPCompatibleMethods = pyVoIP.SIPCompatibleMethods
-        self.heading = b""
+        self.heading: List[str] = []
         self.type: Optional[SIPMessageType] = None
+        self.to: Optional[TFC_HEADER] = None
         self.status = SIPStatus(491)
         self.headers: Dict[str, Any] = {"Via": []}
         self.body: Dict[str, Any] = {}
@@ -315,10 +317,7 @@ class SIPMessage:
 
     def summary(self) -> str:
         data = ""
-        if self.type == SIPMessageType.RESPONSE:
-            data += f"Status: {int(self.status)} {self.status.phrase}\n\n"
-        else:
-            data += f"Method: {self.method}\n\n"
+        data += f"{' '.join(self.heading)}\n\n"
         data += "Headers:\n"
         for x in self.headers:
             data += f"{x}: {self.headers[x]}\n"
@@ -338,10 +337,12 @@ class SIPMessage:
         except ValueError as ve:
             debug(f"Error unpacking data, only using header: {ve}")
             headers = data.split(b"\r\n\r\n")[0]
+            body = b""
 
         headers_raw = headers.split(b"\r\n")
-        heading = headers_raw.pop(0)
-        check = str(heading.split(b" ")[0], "utf8")
+        self.heading = str(headers_raw.pop(0), "utf8").split(" ")
+        check = self.heading[0]
+        data = b"\r\n".join(headers_raw) + b"\r\n\r\n" + body
 
         if check in self.SIPCompatibleVersions:
             self.type = SIPMessageType.RESPONSE
@@ -355,6 +356,59 @@ class SIPMessage:
                 "Unable to decipher SIP request: " + str(heading, "utf8")
             )
         """
+
+    def __get_tfc_header(self, data: str) -> TFC_HEADER:
+        info = data.split(";tag=")
+        tag = ""
+        if len(info) >= 2:
+            tag = info[1]
+        raw = data
+        reg = regex.TO_FROM_MATCH
+        direct = "@" not in data
+        if direct:
+            reg = regex.TO_FROM_DIRECT_MATCH
+        match = reg.match(data)
+        if type(match) != regex.Match:
+            raise SIPParseError(
+                "Regex failed to match To/From.\n\n"
+                + "Please open a GitHub Issue at "
+                + "https://www.github.com/tayler6000/pyVoIP "
+                + "and include the following:\n\n"
+                + f"{data=} {type(match)=}"
+            )
+        matches = match.groupdict()
+        if direct:
+            matches["user"] = ""
+            matches["password"] = ""
+        uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
+        if direct:
+            uri = f'{matches["uri_type"]}:{matches["host"]}'
+        if matches["port"]:
+            uri += matches["port"]
+        uri_type = matches["uri_type"]
+        user = matches["user"]
+        password = (
+            matches["password"].strip(":") if matches["password"] else ""
+        )
+        display_name = (
+            matches["display_name"].strip().strip('"')
+            if matches["display_name"]
+            else ""
+        )
+        host = matches["host"]
+        port = int(matches["port"].strip(":")) if matches["port"] else 5060
+
+        return {
+            "raw": raw,
+            "tag": tag,
+            "uri": uri,
+            "uri-type": uri_type,
+            "user": user,
+            "password": password,
+            "display-name": display_name,
+            "host": host,
+            "port": port,
+        }
 
     def parse_header(self, header: str, data: str) -> None:
         if header in self.compact_key.keys():
@@ -382,62 +436,15 @@ class SIPMessage:
                 """
                 for x in info[2:]:
                     if "=" in x:
-                        _via[x.split("=")[0]] = x.split("=")[1]
+                        try:
+                            _via[x.split("=")[0]] = int(x.split("=")[1])
+                        except ValueError:
+                            _via[x.split("=")[0]] = x.split("=")[1]
                     else:
                         _via[x] = None
                 self.headers["Via"].append(_via)
-        elif header in ["From", "To", "Contact"]:
-            info = data.split(";tag=")
-            tag = ""
-            if len(info) >= 2:
-                tag = info[1]
-            raw = data
-            reg = regex.TO_FROM_MATCH
-            direct = "@" not in data
-            if direct:
-                reg = regex.TO_FROM_DIRECT_MATCH
-            match = reg.match(data)
-            if type(match) != regex.Match:
-                raise SIPParseError(
-                    "Regex failed to match To/From.\n\n"
-                    + "Please open a GitHub Issue at "
-                    + "https://www.github.com/tayler6000/pyVoIP "
-                    + "and include the following:\n\n"
-                    + f"{data=} {type(match)=}"
-                )
-            matches = match.groupdict()
-            if direct:
-                matches["user"] = ""
-                matches["password"] = ""
-            uri = f'{matches["uri_type"]}:{matches["user"]}@{matches["host"]}'
-            if direct:
-                uri = f'{matches["uri_type"]}:{matches["host"]}'
-            if matches["port"]:
-                uri += matches["port"]
-            uri_type = matches["uri_type"]
-            user = matches["user"]
-            password = (
-                matches["password"].strip(":") if matches["password"] else ""
-            )
-            display_name = (
-                matches["display_name"].strip().strip('"')
-                if matches["display_name"]
-                else ""
-            )
-            host = matches["host"]
-            port = int(matches["port"].strip(":")) if matches["port"] else 5060
-
-            self.headers[header] = {
-                "raw": raw,
-                "tag": tag,
-                "uri": uri,
-                "uri-type": uri_type,
-                "user": user,
-                "password": password,
-                "display-name": display_name,
-                "host": host,
-                "port": port,
-            }
+        elif header in ["To", "From", "Contact"]:
+            self.headers[header] = self.__get_tfc_header(data)
         elif header == "CSeq":
             self.headers[header] = {
                 "check": int(data.split(" ")[0]),
@@ -755,12 +762,11 @@ class SIPMessage:
         headers, body = data.split(b"\r\n\r\n")
 
         headers_raw = headers.split(b"\r\n")
-        self.heading = headers_raw.pop(0)
-        self.version = str(self.heading.split(b" ")[0], "utf8")
+        self.version = self.heading[0]
         if self.version not in self.SIPCompatibleVersions:
             raise SIPParseError(f"SIP Version {self.version} not compatible.")
 
-        self.status = SIPStatus(int(self.heading.split(b" ")[1]))
+        self.status = SIPStatus(int(self.heading[1]))
 
         self.parse_raw_header(headers_raw, self.parse_header)
 
@@ -774,12 +780,12 @@ class SIPMessage:
         headers, body = data.split(b"\r\n\r\n")
 
         headers_raw = headers.split(b"\r\n")
-        self.heading = headers_raw.pop(0)
-        self.version = str(self.heading.split(b" ")[2], "utf8")
+        self.version = self.heading[2]
         if self.version not in self.SIPCompatibleVersions:
             raise SIPParseError(f"SIP Version {self.version} not compatible.")
 
-        self.method = str(self.heading.split(b" ")[0], "utf8")
+        self.method = self.heading[0]
+        self.to = self.__get_tfc_header(self.heading[1])
 
         self.parse_raw_header(headers_raw, self.parse_header)
 
