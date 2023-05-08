@@ -2,6 +2,7 @@ from enum import Enum
 from pyVoIP import SIP, RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.sock.transport import TransportMode
+from pyVoIP.types import KEY_PASSWORD
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional, Type
 import audioop
@@ -436,6 +437,9 @@ class VoIPPhone:
         bind_ip="0.0.0.0",
         bind_port=5060,
         transport_mode=TransportMode.UDP,
+        cert_file: Optional[str] = None,
+        key_file: Optional[str] = None,
+        key_password: KEY_PASSWORD = None,
         call_callback: Optional[Callable[["VoIPCall"], None]] = None,
         rtp_port_low=10000,
         rtp_port_high=20000,

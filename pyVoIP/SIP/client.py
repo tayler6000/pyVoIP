@@ -13,6 +13,7 @@ from pyVoIP.SIP.message import (
     SIPMessageType,
 )
 from pyVoIP.sock.transport import TransportMode
+from pyVoIP.types import KEY_PASSWORD
 import pyVoIP
 import hashlib
 import random
@@ -39,6 +40,9 @@ class SIPClient:
         bind_port=5060,
         call_callback: Optional[Callable[[SIPMessage], Optional[str]]] = None,
         transport_mode: TransportMode = TransportMode.UDP,
+        cert_file: Optional[str] = None,
+        key_file: Optional[str] = None,
+        key_password: KEY_PASSWORD = None,
     ):
         self.NSD = False
         self.server = server
@@ -48,6 +52,9 @@ class SIPClient:
         self.user = user
         self.credentials_manager = credentials_manager
         self.transport_mode = transport_mode
+        self.cert_file = cert_file
+        self.key_file = key_file
+        self.key_password = key_password
 
         self.call_callback = call_callback
 
@@ -164,7 +171,7 @@ class SIPClient:
 
         self.NSD = True
         # self.s = socket.socket(socket.AF_INET, self.transport_mode.socket_type)
-        self.s = VoIPSocket(self.transport_mode, self.bind_ip, self.bind_port)
+        self.s = VoIPSocket(self.transport_mode, self.bind_ip, self.bind_port, self.cert_file, self.key_file, self.key_password)
         """
         self.out = socket.socket(
             socket.AF_INET, self.transport_mode.socket_type

@@ -34,8 +34,13 @@ class VoIPConnection:
             self.message
         )
         if conn and message.type == SIPMessageType.REQUEST:
+            if self.sock.mode.tls_mode:
+                client_context = ssl.create_default_context()
+                client_context.check_hostname = pyVoIP.TLS_CHECK_HOSTNAME
+                client_context.verify_mode = pyVoIP.TLS_VERIFY_MODE
+                self.conn = client_context.wrap_socket(self.conn, server_hostname=message.to["host"])
             addr = (message.to["host"], message.to["port"])
-            conn.connect(addr)
+            self.conn.connect(addr)
 
     def send(self, data: Union[bytes, str]) -> None:
         if type(data) is str:
@@ -126,17 +131,17 @@ class VoIPSocket(threading.Thread):
         self.s = socket.socket(socket.AF_INET, mode.socket_type)
         self.bind_ip: str = bind_ip
         self.bind_port: int = bind_port
-        self.server_context = None
+        self.server_context: Optional[ssl.SSLContext] = None
         if mode.tls_mode:
             self.server_context = ssl.SSLContext(
                 protocol=ssl.PROTOCOL_TLS_SERVER
             )
+            self.server_context.load_default_certs()
             if cert_file:
                 self.server_context.load_cert_chain(
                     cert_file, key_file, key_password
                 )
-            self.server_context.load_default_certs()
-            self.s = self.server_context.wrap_socket(self.s)
+            self.s = self.server_context.wrap_socket(self.s, server_side=True)
 
         self.buffer = sqlite3.connect(":memory:", check_same_thread=False)
         """
