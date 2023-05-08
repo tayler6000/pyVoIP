@@ -50,6 +50,7 @@ TLS_CHECK_HOSTNAME = True
 # https://docs.python.org/3/library/ssl.html#ssl.SSLContext.verify_mode
 TLS_VERIFY_MODE = ssl.CERT_REQUIRED
 
+
 def set_tls_security(verify_mode: ssl.VerifyMode) -> None:
     """
     Set the TLS defaults for connections.

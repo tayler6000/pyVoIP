@@ -38,7 +38,9 @@ class VoIPConnection:
                 client_context = ssl.create_default_context()
                 client_context.check_hostname = pyVoIP.TLS_CHECK_HOSTNAME
                 client_context.verify_mode = pyVoIP.TLS_VERIFY_MODE
-                self.conn = client_context.wrap_socket(self.conn, server_hostname=message.to["host"])
+                self.conn = client_context.wrap_socket(
+                    self.conn, server_hostname=message.to["host"]
+                )
             addr = (message.to["host"], message.to["port"])
             self.conn.connect(addr)
 

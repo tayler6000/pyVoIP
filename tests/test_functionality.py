@@ -156,9 +156,9 @@ def test_tls_nopass():
         bind_ip="127.0.0.1",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
-        cert_file = "certs/cert.crt",
-        key_file = "certs/key.txt",
-        key_password = None,
+        cert_file="certs/cert.crt",
+        key_file="certs/key.txt",
+        key_password=None,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
@@ -185,9 +185,9 @@ def test_tls_pass():
         bind_ip="127.0.0.1",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
-        cert_file = "certs/cert.crt",
-        key_file = "certs/key.txt",
-        key_password = None,
+        cert_file="certs/cert.crt",
+        key_file="certs/key.txt",
+        key_password=None,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()

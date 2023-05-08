@@ -171,7 +171,14 @@ class SIPClient:
 
         self.NSD = True
         # self.s = socket.socket(socket.AF_INET, self.transport_mode.socket_type)
-        self.s = VoIPSocket(self.transport_mode, self.bind_ip, self.bind_port, self.cert_file, self.key_file, self.key_password)
+        self.s = VoIPSocket(
+            self.transport_mode,
+            self.bind_ip,
+            self.bind_port,
+            self.cert_file,
+            self.key_file,
+            self.key_password,
+        )
         """
         self.out = socket.socket(
             socket.AF_INET, self.transport_mode.socket_type
