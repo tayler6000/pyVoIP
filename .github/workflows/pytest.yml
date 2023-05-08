@@ -16,19 +16,23 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.7"
+          - "3.8"
 
     steps:
       - uses: actions/checkout@v3.0.2
         with:
           fetch-depth: 2
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4.0.0
+        uses: actions/setup-python@v4.6.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e . -r requirements-test.txt
+      - name: Start Docker
+        run: |
+          docker build docker -t pyvoip/tests
+          docker run -d -p 5060:5060/udp -p 5061-5062:5061-5062/tcp pyvoip/tests
       - name: pytest
-        run: pytest
+        run: pytest --check-func

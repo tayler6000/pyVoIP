@@ -1,5 +1,8 @@
 from enum import Enum
 from pyVoIP import SIP, RTP
+from pyVoIP.credentials import CredentialsManager
+from pyVoIP.sock.transport import TransportMode
+from pyVoIP.types import KEY_PASSWORD
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional, Type
 import audioop
@@ -245,7 +248,7 @@ class VoIPCall:
         message = self.sip.gen_answer(
             request, self.session_id, m, self.sendmode
         )
-        self.sip.sendto(message)
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         for i in request.body["m"]:
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
@@ -260,7 +263,7 @@ class VoIPCall:
         message = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
-        self.sip.sendto(message)
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         self.state = CallState.ANSWERED
 
     def rtp_answered(self, request: SIP.SIPMessage) -> None:
@@ -368,7 +371,7 @@ class VoIPCall:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         message = self.sip.gen_busy(self.request)
-        self.sip.sendto(message)
+        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
@@ -429,11 +432,15 @@ class VoIPPhone:
         self,
         server: str,
         port: int,
-        username: str,
-        password: str,
+        user: str,
+        credentials_manager: CredentialsManager,
         bind_ip="0.0.0.0",
         bind_port=5060,
-        transport_mode=SIP.TransportMode.UDP,
+        transport_mode=TransportMode.UDP,
+        cert_file: Optional[str] = None,
+        key_file: Optional[str] = None,
+        key_password: KEY_PASSWORD = None,
+        call_callback: Optional[Callable[["VoIPCall"], None]] = None,
         rtp_port_low=10000,
         rtp_port_high=20000,
         callClass: Type[VoIPCall] = None,
@@ -448,8 +455,8 @@ class VoIPPhone:
         self.rtp_port_high = rtp_port_high
         self.NSD = False
 
-        self.callClass = not callClass is None and callClass or VoIPCall
-        self.sipClass = not sipClass is None and sipClass or SIP.SIPClient
+        self.callClass = callClass is not None and callClass or VoIPCall
+        self.sipClass = sipClass is not None and sipClass or SIP.SIPClient
 
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
@@ -458,8 +465,9 @@ class VoIPPhone:
         self.server = server
         self.port = port
         self.bind_ip = bind_ip
-        self.username = username
-        self.password = password
+        self.user = user
+        self.credentials_manager = credentials_manager
+        self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
         self.transport_mode = transport_mode
 
@@ -474,8 +482,8 @@ class VoIPPhone:
         self.sip = self.sipClass(
             server,
             port,
-            username,
-            password,
+            user,
+            credentials_manager,
             bind_ip=self.bind_ip,
             bind_port=bind_port,
             call_callback=self.callback,
@@ -484,7 +492,7 @@ class VoIPPhone:
 
     def callback(self, request: SIP.SIPMessage) -> Optional[str]:
         # debug("Callback: "+request.summary())
-        if request.type == pyVoIP.SIP.SIPMessageType.MESSAGE:
+        if request.type == pyVoIP.SIP.SIPMessageType.REQUEST:
             # debug("This is a message")
             if request.method == "INVITE":
                 self._callback_MSG_Invite(request)
@@ -507,6 +515,7 @@ class VoIPPhone:
                 self._callback_RESP_Busy(request)
             elif request.status == SIP.SIPStatus.REQUEST_TERMINATED:
                 self._callback_RESP_Terminated(request)
+        return None  # mypy needs this for some reason.
 
     def get_status(self) -> PhoneStatus:
         return self._status
@@ -527,7 +536,7 @@ class VoIPPhone:
             return  # Raise Error
         if self.callClass is None:
             message = self.sip.gen_busy(request)
-            self.sip.sendto(message)
+            self.sip.sendto(message, request.headers["Via"][0]["address"])
         else:
             debug("New call!")
             sess_id = None
@@ -537,7 +546,7 @@ class VoIPPhone:
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
-            self.sip.sendto(message)
+            self.sip.sendto(message, request.headers["Via"][0]["address"])
             call = self._create_Call(request, sess_id)
             try:
                 t = Timer(1, call.ringing, [request])
@@ -547,7 +556,10 @@ class VoIPPhone:
                 self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.gen_busy(request)
-                self.sip.sendto(message)
+                self.sip.sendto(
+                    message,
+                    request.headers["Via"][0]["address"],
+                )
                 raise
 
     def _callback_MSG_Bye(self, request: SIP.SIPMessage) -> None:
@@ -580,7 +592,13 @@ class VoIPPhone:
             self.calls[call_id].answered(request)
             debug("Answered")
         ack = self.sip.gen_ack(request)
-        self.sip.sendto(ack)
+        self.sip.sendto(
+            ack,
+            (
+                request.headers["Contact"]["host"],
+                request.headers["Contact"]["port"],
+            ),
+        )
 
     def _callback_RESP_Ringing(self, request: SIP.SIPMessage) -> None:
         debug("Ringing received")
@@ -685,15 +703,28 @@ class VoIPPhone:
         self._status = PhoneStatus.INACTIVE
 
     def call(
-        self, number: str, media: Dict[int, RTP.PayloadType] = None
+        self,
+        number: str,
+        payload_types: Optional[List[RTP.PayloadType]] = None,
     ) -> VoIPCall:
         port = self.request_port()
-        if media is None:
-            media = {0: RTP.PayloadType.PCMU}
-        # must have
-        media[101] = RTP.PayloadType.EVENT
         medias = {}
-        medias[port] = media
+        if not payload_types:
+            payload_types = [RTP.PayloadType.PCMU, RTP.PayloadType.EVENT]
+        medias[port] = {}
+        dynamic_int = 101
+        for pt in payload_types:
+            if pt not in pyVoIP.RTPCompatibleCodecs:
+                raise RuntimeError(
+                    "Unable to make call!\n\n"
+                    + f"{pt} is not supported by pyVoIP {pyVoIP.__version__}"
+                )
+            try:
+                medias[port][int(pt)] = pt
+            except RTP.DynamicPayloadType:
+                medias[port][dynamic_int] = pt
+                dynamic_int += 1
+        debug(f"Making call with {medias=}")
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
