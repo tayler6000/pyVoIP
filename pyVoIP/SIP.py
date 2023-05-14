@@ -524,7 +524,7 @@ class SIPMessage:
                 # c=IN IP4 224.2.1.2/127
                 # c=IN IP4 224.2.1.3/127
                 # With the TTL being 127.
-                # IPv6 does not support time to live so you will only see a '/'
+                # IPv6 does not support time to live, so you will only see a '/'
                 # for multicast addresses.
                 if "/" in d[2]:
                     if d[1] == "IP6":
@@ -1005,7 +1005,7 @@ class SIPClient:
         return self.gen_tag()
 
     def gen_tag(self) -> str:
-        # Keep as True instead of NSD so it can generate a tag on deregister.
+        # Keep as True instead of NSD, so it can generate a tag on deregister.
         while True:
             rand = str(random.randint(1, 4294967296)).encode("utf8")
             tag = hashlib.md5(rand).hexdigest()[0:8]

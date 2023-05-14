@@ -56,7 +56,7 @@ class VoIPCall:
         callstate: CallState,
         request: SIP.SIPMessage,
         session_id: int,
-        myIP: str,
+        my_ip: str,
         ms: Optional[Dict[int, RTP.PayloadType]] = None,
         sendmode="sendonly",
     ):
@@ -66,7 +66,7 @@ class VoIPCall:
         self.request = request
         self.call_id = request.headers["Call-ID"]
         self.session_id = str(session_id)
-        self.myIP = myIP
+        self.myIP = my_ip
         self.rtpPortHigh = self.phone.rtpPortHigh
         self.rtpPortLow = self.phone.rtpPortLow
         self.sendmode = sendmode
@@ -105,17 +105,17 @@ class VoIPCall:
 
             # Ports Adjusted is used in case of multiple m tags.
             if len(audio) > 0:
-                audioPortsAdj = self.audioPorts / len(audio)
+                audio_ports_adj = self.audioPorts / len(audio)
             else:
-                audioPortsAdj = 0
+                audio_ports_adj = 0
             if len(video) > 0:
-                videoPortsAdj = self.videoPorts / len(video)
+                video_ports_adj = self.videoPorts / len(video)
             else:
-                videoPortsAdj = 0
+                video_ports_adj = 0
 
             if not (
-                (audioPortsAdj == self.connections or self.audioPorts == 0)
-                and (videoPortsAdj == self.connections or self.videoPorts == 0)
+                (audio_ports_adj == self.connections or self.audioPorts == 0)
+                and (video_ports_adj == self.connections or self.videoPorts == 0)
             ):
                 # TODO: Throw error to PBX in this case
                 warnings.warn("Unable to assign ports for RTP.", stacklevel=2)
@@ -218,7 +218,7 @@ class VoIPCall:
                 request.body["c"][ii]["address"],
                 baseport + ii,
                 self.sendmode,
-                dtmf=self.dtmfCallback,
+                dtmf=self.dtmf_callback,
             )
             self.RTPClients.append(c)
 
@@ -616,7 +616,7 @@ class VoIPPhone:
                 "TODO: Add 481 here as server is probably waiting for "
                 + "an ACK"
             )
-        self.calls[call_id].notFound(request)
+        self.calls[call_id].not_found(request)
         debug("Terminating Call")
         ack = self.sip.genAck(request)
         self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
@@ -632,7 +632,7 @@ class VoIPPhone:
             )
         self.calls[call_id].unavailable(request)
         debug("Terminating Call")
-        ack = self.sip.genAck(request)
+        ack = self.sip.gen_ack(request)
         self.sip.out.sendto(ack.encode("utf8"), (self.server, self.port))
 
     def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> None:
@@ -674,8 +674,7 @@ class VoIPPhone:
 
     def call(self, number: str) -> VoIPCall:
         port = self.request_port()
-        medias = {}
-        medias[port] = {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}
+        medias = {port: {0: RTP.PayloadType.PCMU, 101: RTP.PayloadType.EVENT}}
         request, call_id, sess_id = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
@@ -698,7 +697,7 @@ class VoIPPhone:
             if port not in self.assignedPorts
         ]
         if len(ports_available) == 0:
-            # If no ports are available attempt to cleanup any missed calls.
+            # If no ports are available attempt to clean up any missed calls.
             self.release_ports()
             ports_available = [
                 port
