@@ -171,7 +171,7 @@ class VoIPCall:
                 # TODO: If no codecs are compatible then send error to PBX.
 
                 port = self.phone.request_port()
-                self.createRTPClients(
+                self.create_rtp_clients(
                     codecs, self.myIP, port, request, i["port"]
                 )
         elif callstate == CallState.DIALING:
