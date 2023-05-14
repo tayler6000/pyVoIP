@@ -1633,7 +1633,7 @@ class SIPClient:
         return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
     def bye(self, request: SIPMessage) -> None:
-        message = self.genBye(request)
+        message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode("utf8"), (self.server, self.port))
 
