@@ -381,7 +381,7 @@ class RTPClient:
         while self.NSD:
             last_sent = time.monotonic_ns()
             payload = self.pmout.read()
-            payload = self.encodePacket(payload)
+            payload = self.encode_packet(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
             packet += chr(int(self.preference)).encode("utf8")
             try:
@@ -456,7 +456,7 @@ class RTPClient:
         if self.preference == PayloadType.PCMU:
             return self.encodePCMU(payload)
         elif self.preference == PayloadType.PCMA:
-            return self.encodePCMA(payload)
+            return self.encode_pcma(payload)
         else:
             raise RTPParseError(
                 "Unsupported codec (encode): " + str(self.preference)

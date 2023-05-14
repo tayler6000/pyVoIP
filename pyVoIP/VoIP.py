@@ -282,8 +282,8 @@ class VoIPCall:
         return m
 
     def renegotiate(self, request: SIP.SIPMessage) -> None:
-        m = self.genMs()
-        message = self.sip.genAnswer(
+        m = self.gen_ms()
+        message = self.sip.gen_answer(
             request, self.session_id, m, self.sendmode
         )
         self.sip.out.sendto(
@@ -299,8 +299,8 @@ class VoIPCall:
     def answer(self) -> None:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
-        m = self.genMs()
-        message = self.sip.genAnswer(
+        m = self.gen_ms()
+        message = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
         self.sip.out.sendto(
