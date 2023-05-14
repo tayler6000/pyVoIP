@@ -331,7 +331,7 @@ class VoIPCall:
             if e:
                 raise RTP.RTPParseError(f"RTP Payload type {p} not found.")
 
-            self.createRTPClients(
+            self.create_rtp_clients(
                 assoc, self.myIP, self.port, request, i["port"]
             )
 
