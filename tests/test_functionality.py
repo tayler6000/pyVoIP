@@ -1,5 +1,6 @@
 from pyVoIP.credentials import CredentialsManager
-from pyVoIP.VoIP import VoIPPhone, PhoneStatus, CallState
+from pyVoIP.VoIP.call import CallState
+from pyVoIP.VoIP.phone import PhoneStatus, VoIPPhone
 from pyVoIP.sock.transport import TransportMode
 import pytest
 import pyVoIP
