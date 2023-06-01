@@ -109,7 +109,10 @@ class VoIPConnection:
                 conn.execute(
                     """DELETE FROM "msgs" WHERE "id" = ?""", (row["id"],)
                 )
-                self.sock.buffer.commit()
+                try:
+                    self.sock.buffer.commit()
+                except sqlite3.OperationalError:
+                    pass
                 conn.close()
                 return row["msg"].encode("utf8")
 
@@ -180,7 +183,10 @@ class VoIPSocket(threading.Thread):
                 PRIMARY KEY("call_id", "local_tag", "remote_tag")
             );"""
         )
-        self.buffer.commit()
+        try:
+            self.buffer.commit()
+        except sqlite3.OperationalError:
+            pass
         conn.close()
         self.conns_lock = threading.Lock()
         self.conns: List[VoIPConnection] = []
@@ -260,7 +266,10 @@ class VoIPSocket(threading.Thread):
                 conn_id,
             ),
         )
-        self.buffer.commit()
+        try:
+            self.buffer.commit()
+        except sqlite3.OperationalError:
+            pass
         conn.close()
         self.conns_lock.release()
 
@@ -353,7 +362,10 @@ class VoIPSocket(threading.Thread):
                 "INSERT INTO msgs (call_id, local_tag, remote_tag, msg) VALUES (?, ?, ?, ?)",
                 (call_id, local_tag, remote_tag, raw_message),
             )
-            self.buffer.commit()
+            try:
+                self.buffer.commit()
+            except sqlite3.OperationalError:
+                pass
             conn.close()
 
     def close(self) -> None:
