@@ -336,7 +336,9 @@ class RTPClient:
 
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Some systems just reply to the port they receive from instead of
+        # listening to the SDP.
+        self.sout = self.sin
         self.sin.bind((self.inIP, self.inPort))
         self.sin.setblocking(False)
 
