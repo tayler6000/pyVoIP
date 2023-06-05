@@ -122,6 +122,8 @@ class VoIPCall:
                 return
 
             for i in request.body["m"]:
+                if i["type"] == "video":  # Disable Video
+                    continue
                 assoc = {}
                 e = False
                 for x in i["methods"]:
@@ -159,8 +161,12 @@ class VoIPCall:
                             assoc[int(x)] = p
 
                 if e:
+                    if pt:
+                        raise RTP.RTPParseError(
+                            f"RTP Payload type {pt} not found."
+                        )
                     raise RTP.RTPParseError(
-                        f"RTP Payload type {pt} not found."
+                        "RTP Payload type could not be derived from SDP."
                     )
 
                 # Make sure codecs are compatible.
@@ -290,6 +296,8 @@ class VoIPCall:
             message.encode("utf8"), (self.phone.server, self.phone.port)
         )
         for i in request.body["m"]:
+            if i["type"] == "video":  # Disable Video
+                continue
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
             ):
@@ -313,8 +321,9 @@ class VoIPCall:
             return
 
         for i in request.body["m"]:
+            if i["type"] == "video":  # Disable Video
+                continue
             assoc = {}
-            e = False
             for x in i["methods"]:
                 try:
                     p = RTP.PayloadType(int(x))
@@ -326,10 +335,13 @@ class VoIPCall:
                         )
                         assoc[int(x)] = p
                     except ValueError:
-                        e = True
-
-            if e:
-                raise RTP.RTPParseError(f"RTP Payload type {p} not found.")
+                        if p:
+                            raise RTP.RTPParseError(
+                                f"RTP Payload type {p} not found."
+                            )
+                        raise RTP.RTPParseError(
+                            "RTP Payload type could not be derived from SDP."
+                        )
 
             self.createRTPClients(
                 assoc, self.myIP, self.port, request, i["port"]
