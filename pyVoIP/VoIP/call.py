@@ -20,6 +20,7 @@ debug = pyVoIP.debug
 
 if TYPE_CHECKING:
     from pyVoIP.VoIP.phone import VoIPPhone
+    from pyVoIP.sock.sock import VoIPConnection
 
 
 class CallState(Enum):
@@ -39,6 +40,7 @@ class VoIPCall:
         request: SIP.SIPMessage,
         session_id: int,
         bind_ip: str,
+        conn: "VoIPConnection",
         ms: Optional[Dict[int, RTP.PayloadType]] = None,
         sendmode="sendonly",
     ):

@@ -330,7 +330,7 @@ class VoIPPhone:
                 medias[port][dynamic_int] = pt
                 dynamic_int += 1
         debug(f"Making call with {medias=}")
-        request, call_id, sess_id = self.sip.invite(
+        request, call_id, sess_id, conn = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
         self.calls[call_id] = self.callClass(
@@ -341,6 +341,7 @@ class VoIPPhone:
             self.bind_ip,
             ms=medias,
             sendmode=self.sendmode,
+            conn=conn,
         )
 
         return self.calls[call_id]

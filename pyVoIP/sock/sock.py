@@ -2,6 +2,7 @@ from typing import List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
 from pyVoIP.SIP import SIPMessage, SIPMessageType
 from pyVoIP.sock.transport import TransportMode
+import json
 import math
 import pyVoIP
 import socket
@@ -253,25 +254,49 @@ class VoIPSocket(threading.Thread):
         self.conns_lock.acquire()
         self.conns.append(connection)
         conn_id = len(self.conns) - 1
-        conn = self.buffer.cursor()
-        conn.execute(
-            """INSERT INTO "listening"
-                ("call_id", "local_tag", "remote_tag", "connection")
-                VALUES
-                (?, ?, ?, ?)""",
-            (
-                connection.call_id,
-                connection.local_tag,
-                connection.remote_tag,
-                conn_id,
-            ),
-        )
         try:
+            conn = self.buffer.cursor()
+            conn.execute(
+                """INSERT INTO "listening"
+                    ("call_id", "local_tag", "remote_tag", "connection")
+                    VALUES
+                    (?, ?, ?, ?)""",
+                (
+                    connection.call_id,
+                    connection.local_tag,
+                    connection.remote_tag,
+                    conn_id,
+                ),
+            )
             self.buffer.commit()
+        except sqlite3.IntegrityError as e:
+            e.add_note(
+                "Error is from registering connection for message: "
+                + f"{connection.message.summary()}"
+            )
+            e.add_note("Internal Database Dump:\n" + self.get_database_dump())
+            e.add_note(
+                f"({connection.call_id=}, {connection.local_tag=}, "
+                + f"{connection.remote_tag=}, {conn_id=})"
+            )
+            raise
         except sqlite3.OperationalError:
             pass
-        conn.close()
-        self.conns_lock.release()
+        finally:
+            conn.close()
+            self.conns_lock.release()
+
+    def get_database_dump(self) -> str:
+        conn = self.buffer.cursor()
+        ret = ""
+        try:
+            result = conn.execute('SELECT * FROM "listening";')
+            ret += "listening: " + json.dumps(result.fetchall()) + "\n\n"
+            result = conn.execute('SELECT * FROM "msgs";')
+            ret += "msgs: " + json.dumps(result.fetchall()) + "\n\n"
+        finally:
+            conn.close()
+            return ret
 
     def determine_tags(self, message: SIPMessage) -> Tuple[str, str]:
         """
@@ -289,7 +314,7 @@ class VoIPSocket(threading.Thread):
         from_port = from_header["port"]
         from_tag = from_header["tag"] if from_header["tag"] else None
 
-        if to_host == self.bind_ip and to_port == self.bind_port:
+        if to_host == self.bind_ip and to_port == self.bind_port and to_tag:
             return to_tag, from_tag
         elif from_host == self.bind_ip and from_port == self.bind_port:
             return from_tag, to_tag
@@ -359,7 +384,8 @@ class VoIPSocket(threading.Thread):
             raw_message = data.decode("utf8")
             conn = self.buffer.cursor()
             conn.execute(
-                "INSERT INTO msgs (call_id, local_tag, remote_tag, msg) VALUES (?, ?, ?, ?)",
+                "INSERT INTO msgs (call_id, local_tag, remote_tag, msg) "
+                + "VALUES (?, ?, ?, ?)",
                 (call_id, local_tag, remote_tag, raw_message),
             )
             try:
