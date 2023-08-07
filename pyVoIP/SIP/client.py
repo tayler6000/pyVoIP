@@ -19,7 +19,6 @@ import hashlib
 import random
 import time
 import uuid
-import select
 
 
 if TYPE_CHECKING:
