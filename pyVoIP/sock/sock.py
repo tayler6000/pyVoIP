@@ -71,9 +71,11 @@ class VoIPConnection:
         )
         rows = result.fetchall()
         if rows:
+            print(f"Found remote: {rows[0][0]}")
             self.remote_tag = rows[0][0]
 
     def recv(self, nbytes: int, timeout=0) -> bytes:
+        timeout = time.monotonic() + timeout if timeout else math.inf
         if self.conn:
             # TODO: Timeout
             msg = None
@@ -86,16 +88,19 @@ class VoIPConnection:
                         connection=self, error=e, received=data
                     )
                     self.send(br)
+            if time.monotonic() <= timeout:
+                raise TimeoutError()
             debug(f"RECEIVED:\n{msg.summary()}")
             return data
         else:
             self.__find_remote_tag()
-            timeout = time.monotonic() + timeout if timeout else math.inf
             while time.monotonic() <= timeout and not self.sock.SD:
+                # print("Trying to receive")
+                # print(self.sock.get_database_dump())
                 conn = self.sock.buffer.cursor()
                 conn.row_factory = sqlite3.Row
                 sql = (
-                    """SELECT * FROM "msgs" WHERE "call_id" = ? AND "local_tag" = ?"""
+                    'SELECT * FROM "msgs" WHERE "call_id"=? AND "local_tag"=?'
                     + (""" AND "remote_tag" = ?""" if self.remote_tag else "")
                 )
                 bindings = (
@@ -107,15 +112,21 @@ class VoIPConnection:
                 row = result.fetchone()
                 if not row:
                     continue
-                conn.execute(
-                    """DELETE FROM "msgs" WHERE "id" = ?""", (row["id"],)
-                )
+                conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
                 try:
                     self.sock.buffer.commit()
                 except sqlite3.OperationalError:
                     pass
                 conn.close()
                 return row["msg"].encode("utf8")
+            if time.monotonic() <= timeout:
+                raise TimeoutError()
+
+    def close(self):
+        self.__find_remote_tag()
+        self.sock.deregister_connection(self)
+        if self.conn:
+            self.conn.close()
 
 
 class VoIPSocket(threading.Thread):
@@ -230,23 +241,41 @@ class VoIPSocket(threading.Thread):
         result = conn.execute(
             """SELECT "connection" FROM "listening" WHERE
                 "call_id" = ?
-                AND "local_tag" = ?""",
+                AND "local_tag" = ?
+                AND "remote_tag" is NULL""",
             (call_id, local_tag),
         )
         rows = result.fetchall()
         if rows:
+            conn.execute(
+                """UPDATE "listening" SET
+                    "remote_tag" = ? WHERE
+                    "call_id" = ?
+                    AND "local_tag" = ?
+                    AND "remote_tag" is NULL""",
+                (remote_tag, call_id, local_tag),
+            )
             conn.close()
             return self.conns[rows[0][0]]
         # If we still didn't find one, maybe we got the local and remote wrong?
         result = conn.execute(
             """SELECT "connection" FROM "listening" WHERE
                 "call_id" = ?
-                AND "local_tag" = ?""",
+                AND "local_tag" = ?
+                AND "remote_tag" is NULL""",
             (call_id, remote_tag),
         )
         rows = result.fetchall()
         conn.close()
         if rows:
+            conn.execute(
+                """UPDATE "listening" SET
+                    "remote_tag" = ? WHERE
+                    "call_id" = ?
+                    AND "local_tag" = ?
+                    AND "remote_tag" is NULL""",
+                (local_tag, call_id, remote_tag),
+            )
             return self.conns[rows[0][0]]
         return None
 
@@ -284,6 +313,42 @@ class VoIPSocket(threading.Thread):
             pass
         finally:
             conn.close()
+            self.conns_lock.release()
+
+    def deregister_connection(self, connection: VoIPConnection) -> None:
+        self.conns_lock.acquire()
+        print(f"Deregistering {connection}")
+        print(f"{self.conns=}")
+        print(self.get_database_dump())
+        try:
+            conn = self.buffer.cursor()
+            result = conn.execute(
+                """SELECT "connection" FROM "listening"
+                    WHERE "call_id" = ? AND "local_tag" = ?
+                    AND "remote_tag" = ?""",
+                (
+                    connection.call_id,
+                    connection.local_tag,
+                    connection.remote_tag,
+                ),
+            )
+            row = result.fetchone()
+            conn_id = row[0]
+            """
+            Need to set to None to not change the indexes of any other conn
+            """
+            self.conns[conn_id] = None
+            conn.execute(
+                'DELETE FROM "listening" WHERE "connection" = ?', (conn_id,)
+            )
+            self.buffer.commit()
+        except sqlite3.OperationalError:
+            pass
+        finally:
+            conn.close()
+            print("Deregistered")
+            print(f"{self.conns=}")
+            print(self.get_database_dump())
             self.conns_lock.release()
 
     def get_database_dump(self) -> str:

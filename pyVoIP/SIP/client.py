@@ -213,7 +213,7 @@ class SIPClient:
             address = (self.server, self.port)
         return self.s.send(request.encode("utf8"))
 
-    def send(self, request: str):
+    def send(self, request: str) -> "VoIPConnection":
         return self.s.send(request.encode("utf8"))
 
     def __gen_from_to_via_request(
@@ -1005,54 +1005,19 @@ class SIPClient:
         self.sendto(message)
 
     def deregister(self) -> bool:
-        firstRequest = self.gen_first_request(deregister=True)
-        conn = self.send(firstRequest)
+        first_request = self.gen_first_request(deregister=True)
+        conn = self.send(first_request)
 
-        resp = conn.recv(8192)
-
-        response = SIPMessage(resp)
-        response = self.trying_timeout_check(conn, response)
+        response = self.__receive(conn)
+        first_response = response
+        conn.close()  # Regardless of the response, the dialog is over
 
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
-            regRequest = self.gen_register(response, deregister=True)
-            conn.send(regRequest)
-            resp = conn.recv(8192)
-            response = SIPMessage(resp)
-            if response.status == SIPStatus(401):
-                # At this point, it's reasonable to assume that
-                # this is caused by invalid credentials.
-                debug("Unauthorized")
-                raise InvalidAccountInfoError(
-                    "Invalid Username or "
-                    + "Password for SIP server "
-                    + f"{self.server}:"
-                    + f"{self.bind_port}"
-                )
-            elif response.status == SIPStatus(400):
-                # Bad Request
-                # TODO: implement
-                # TODO: check if broken connection can be brought back
-                # with new urn:uuid or reply with expire 0
-                self._handle_bad_request()
-
-        if response.status == SIPStatus(500):
-            time.sleep(5)
-            return self.deregister()
-
-        if response.status == SIPStatus.OK:
-            return True
-        return False
-
-    def register(self) -> bool:
-        firstRequest = self.gen_first_request()
-        conn = self.send(firstRequest)
-
-        resp = conn.recv(8192)
-
-        response = SIPMessage(resp)
-        response = self.trying_timeout_check(conn, response)
-        first_response = response
+            password_request = self.gen_register(response, deregister=True)
+            conn = self.send(password_request)
+            response = self.__receive(conn)
+            conn.close()
 
         if response.status == SIPStatus(400):
             # Bad Request
@@ -1061,63 +1026,71 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        if response.status == SIPStatus(401):
-            # Unauthorized, likely due to being password protected.
-            regRequest = self.gen_register(response)
-            conn.send(regRequest)
-            resp = conn.recv(8192)
-            response = SIPMessage(resp)
-            response = self.trying_timeout_check(conn, response)
-            if response.status == SIPStatus(401):
-                # At this point, it's reasonable to assume that
-                # this is caused by invalid credentials.
-                debug("=" * 50)
-                debug("Unauthorized, SIP Message Log:\n")
-                debug("SENT")
-                debug(firstRequest)
-                debug("\nRECEIVED")
-                debug(first_response.summary())
-                debug("\nSENT (DO NOT SHARE THIS PACKET)")
-                debug(regRequest)
-                debug("\nRECEIVED")
-                debug(response.summary())
-                debug("=" * 50)
-                raise InvalidAccountInfoError(
-                    "Invalid Username or "
-                    + "Password for SIP server "
-                    + f"{self.server}:"
-                    + f"{self.bind_port}"
-                )
-            elif response.status == SIPStatus(400):
-                # Bad Request
-                # TODO: implement
-                # TODO: check if broken connection can be brought back
-                # with new urn:uuid or reply with expire 0
-                self._handle_bad_request()
-
-        if response.status == SIPStatus(407):
+        elif response.status == SIPStatus(407):
             # Proxy Authentication Required
             # TODO: implement
             debug("Proxy auth required")
 
-        # TODO: This must be done more reliable
-        if response.status not in [
-            SIPStatus(400),
-            SIPStatus(401),
-            SIPStatus(407),
-        ]:
-            # Unauthorized
-            if response.status == SIPStatus(500):
-                time.sleep(5)
-                return self.register()
-            else:
-                # TODO: determine if needed here
-                self.parse_message(response)
+        elif response.status == SIPStatus(500):
+            raise Exception("Received a 500 error when deregistering.")
 
-        debug(response.summary())
-        debug(response.raw)
+        elif response.status == SIPStatus.OK:
+            return True
 
-        if response.status == SIPStatus.OK:
+        elif response.status == SIPStatus(401):
+            # At this point, it's reasonable to assume that
+            # this is caused by invalid credentials.
+            debug("=" * 50)
+            debug("Unauthorized deregister, SIP Message Log:\n")
+            debug("SENT")
+            debug(first_request)
+            debug("\nRECEIVED")
+            debug(first_response.summary())
+            debug("\nSENT (DO NOT SHARE THIS PACKET)")
+            debug(password_request)
+            debug("\nRECEIVED")
+            debug(response.summary())
+            debug("=" * 50)
+            raise InvalidAccountInfoError(
+                f"Invalid Username or Password for SIP server {self.server}:"
+                + f"{self.bind_port}"
+            )
+
+        raise Exception(
+            f"Unable to deregister. Ended with {response.summary()}"
+        )
+
+    def register(self) -> bool:
+        first_request = self.gen_first_request()
+        conn = self.send(first_request)
+
+        response = self.__receive(conn)
+        first_response = response
+        conn.close()  # Regardless of the response, the dialog is over
+
+        if response.status == SIPStatus(401):
+            # Unauthorized, likely due to being password protected.
+            password_request = self.gen_register(response)
+            conn = self.send(password_request)
+            response = self.__receive(conn)
+            conn.close()
+
+        if response.status == SIPStatus(400):
+            # Bad Request
+            # TODO: implement
+            # TODO: check if broken connection can be brought back
+            # with new urn:uuid or reply with expire 0
+            self._handle_bad_request()
+
+        elif response.status == SIPStatus(407):
+            # Proxy Authentication Required
+            # TODO: implement
+            debug("Proxy auth required")
+
+        elif response.status == SIPStatus(500):
+            raise Exception("Received a 500 error when registering.")
+
+        elif response.status == SIPStatus.OK:
             if self.NSD:
                 # self.subscribe(response)
                 self.registerThread = Timer(
@@ -1128,12 +1101,27 @@ class SIPClient:
                 )
                 self.registerThread.start()
             return True
-        else:
+
+        elif response.status == SIPStatus(401):
+            # At this point, it's reasonable to assume that
+            # this is caused by invalid credentials.
+            debug("=" * 50)
+            debug("Unauthorized, SIP Message Log:\n")
+            debug("SENT")
+            debug(first_request)
+            debug("\nRECEIVED")
+            debug(first_response.summary())
+            debug("\nSENT (DO NOT SHARE THIS PACKET)")
+            debug(password_request)
+            debug("\nRECEIVED")
+            debug(response.summary())
+            debug("=" * 50)
             raise InvalidAccountInfoError(
-                "Invalid Username or Password for "
-                + f"SIP server {self.server}:"
+                f"Invalid Username or Password for SIP server {self.server}:"
                 + f"{self.bind_port}"
             )
+
+        raise Exception(f"Unable to register. Ended with {response.summary()}")
 
     def _handle_bad_request(self) -> None:
         # Bad Request
@@ -1152,25 +1140,21 @@ class SIPClient:
 
         debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
 
-    def trying_timeout_check(
-        self, conn: "VoIPConnection", response: SIPMessage
-    ) -> SIPMessage:
+    def __receive(self, conn: "VoIPConnection") -> SIPMessage:
         """
         Some servers need time to process the response.
         When this happens, the first response you get from the server is
         SIPStatus.TRYING. This while loop tries checks every second for an
-        updated response. It times out after 30 seconds.
+        updated response. It times out after 30 seconds with no response.
         """
-        start_time = time.monotonic()
-        while response.status == SIPStatus.TRYING:
-            if (time.monotonic() - start_time) >= self.register_timeout:
-                raise TimeoutError(
-                    f"Waited {self.register_timeout} seconds but server is "
-                    + "still TRYING"
-                )
-
-            ready = select.select([self.s], [], [], self.register_timeout)
-            if ready[0]:
-                resp = self.s.recv(8192)
-            response = SIPMessage(resp)
+        try:
+            response = SIPMessage(conn.recv(8128, self.register_timeout))
+            while response.status == SIPStatus.TRYING and self.NSD:
+                response = SIPMessage(conn.recv(8128, self.register_timeout))
+                time.sleep(1)
+        except TimeoutError:
+            raise TimeoutError(
+                f"Waited {self.register_timeout} seconds but the server is "
+                + "still TRYING or has not responded."
+            )
         return response
