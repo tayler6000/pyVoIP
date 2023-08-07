@@ -368,7 +368,7 @@ class SIPMessage:
         if direct:
             reg = regex.TO_FROM_DIRECT_MATCH
         match = reg.match(data)
-        if type(match) != regex.Match:
+        if match is None:
             raise SIPParseError(
                 "Regex failed to match To/From.\n\n"
                 + "Please open a GitHub Issue at "
