@@ -453,7 +453,7 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization":
+        elif header in ["WWW-Authenticate", "Authorization", "Proxy-Authenticate"]:
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
@@ -811,6 +811,7 @@ class SIPClient:
         self.myIP = myIP
         self.username = username
         self.password = password
+        self.auth_header_key = "Authorization"
 
         self.callCallback = callCallback
 
@@ -1235,7 +1236,7 @@ class SIPClient:
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
         regRequest += (
-            f'Authorization: Digest username="{self.username}",'
+            f'{self.auth_header_key}: Digest username="{self.username}",'
             + f'realm="{realm}",nonce="{nonce}",'
             + f'uri="sip:{self.server};transport=UDP",'
             + f'response="{response}",algorithm=MD5\r\n'
@@ -1594,6 +1595,7 @@ class SIPClient:
             response.status != SIPStatus(401)
             and response.status != SIPStatus(100)
             and response.status != SIPStatus(180)
+            and response.status != SIPStatus(407)
         ) or response.headers["Call-ID"] != call_id:
             if not self.NSD:
                 break
@@ -1612,8 +1614,10 @@ class SIPClient:
         authhash = self.genAuthorization(response)
         nonce = response.authentication["nonce"]
         realm = response.authentication["realm"]
+        if response.status == SIPStatus(407):
+            self.auth_header_key = "Proxy-Authorization"
         auth = (
-            f'Authorization: Digest username="{self.username}",realm='
+            f'{self.auth_header_key}: Digest username="{self.username}",realm='
             + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
             + f'transport=UDP",response="{str(authhash, "utf8")}",'
             + "algorithm=MD5\r\n"
