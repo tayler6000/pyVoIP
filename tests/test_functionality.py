@@ -13,6 +13,10 @@ TEST_CONDITION = (
 )
 REASON = "Not checking functionality"
 pyVoIP.set_tls_security(ssl.CERT_NONE)
+SERVER_HOST = "127.0.0.1"
+UDP_PORT = 5060
+TCP_PORT = 5061
+TLS_PORT = 5062
 
 
 @pytest.fixture
@@ -20,11 +24,11 @@ def phone():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
+        SERVER_HOST,
+        UDP_PORT,
         "pass",
         cm,
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
     )
     phone.start()
@@ -35,11 +39,11 @@ def phone():
 @pytest.fixture
 def nopass_phone():
     phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
+        SERVER_HOST,
+        UDP_PORT,
         "nopass",
         CredentialsManager(),
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
     )
     phone.start()
@@ -52,11 +56,11 @@ def nopass_phone():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_nopass():
     phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
+        SERVER_HOST,
+        UDP_PORT,
         "nopass",
         CredentialsManager(),
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
@@ -77,11 +81,11 @@ def test_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
+        SERVER_HOST,
+        UDP_PORT,
         "pass",
         cm,
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
     )
     assert phone.get_status() == PhoneStatus.INACTIVE
@@ -100,11 +104,11 @@ def test_pass():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tcp_nopass():
     phone = VoIPPhone(
-        "127.0.0.1",
-        5061,
+        SERVER_HOST,
+        TCP_PORT,
         "nopass",
         CredentialsManager(),
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
         transport_mode=TransportMode.TCP,
     )
@@ -126,11 +130,11 @@ def test_tcp_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     phone = VoIPPhone(
-        "127.0.0.1",
-        5061,
+        SERVER_HOST,
+        TCP_PORT,
         "pass",
         cm,
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
         transport_mode=TransportMode.TCP,
     )
@@ -150,11 +154,11 @@ def test_tcp_pass():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tls_nopass():
     phone = VoIPPhone(
-        "127.0.0.1",
-        5062,
+        SERVER_HOST,
+        TLS_PORT,
         "nopass",
         CredentialsManager(),
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
         cert_file="certs/cert.crt",
@@ -179,11 +183,11 @@ def test_tls_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     phone = VoIPPhone(
-        "127.0.0.1",
-        5062,
+        SERVER_HOST,
+        TLS_PORT,
         "pass",
         cm,
-        bind_ip="127.0.0.1",
+        hostname="host.docker.internal",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
         cert_file="certs/cert.crt",

@@ -88,7 +88,7 @@ class VoIPConnection:
                         connection=self, error=e, received=data
                     )
                     self.send(br)
-            if time.monotonic() <= timeout:
+            if time.monotonic() >= timeout:
                 raise TimeoutError()
             debug(f"RECEIVED:\n{msg.summary()}")
             return data
@@ -119,7 +119,7 @@ class VoIPConnection:
                     pass
                 conn.close()
                 return row["msg"].encode("utf8")
-            if time.monotonic() <= timeout:
+            if time.monotonic() >= timeout:
                 raise TimeoutError()
 
     def close(self):
@@ -316,6 +316,8 @@ class VoIPSocket(threading.Thread):
             self.conns_lock.release()
 
     def deregister_connection(self, connection: VoIPConnection) -> None:
+        if self.mode is not TransportMode.UDP:
+            return
         self.conns_lock.acquire()
         print(f"Deregistering {connection}")
         print(f"{self.conns=}")
@@ -365,7 +367,7 @@ class VoIPSocket(threading.Thread):
 
     def determine_tags(self, message: SIPMessage) -> Tuple[str, str]:
         """
-        Returns local_tag, remote_tag
+        Return local_tag, remote_tag
         """
         # TODO: Eventually NAT will be supported for people who don't have a SIP ALG
         # We will need to take that into account when determining the remote tag.
@@ -398,8 +400,7 @@ class VoIPSocket(threading.Thread):
             message.type == SIPMessageType.REQUEST and message.method != "ACK"
         ):
             return to_tag, from_tag
-        else:
-            return from_tag, to_tag
+        return from_tag, to_tag
 
     def bind(self, addr: Tuple[str, int]) -> None:
         self.s.bind(addr)

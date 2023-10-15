@@ -7,6 +7,7 @@ from pyVoIP.SIP.error import (
     InvalidAccountInfoError,
 )
 from pyVoIP.helpers import Counter
+from pyVoIP.networking.nat import NAT
 from pyVoIP.SIP.message import (
     SIPMessage,
     SIPStatus,
@@ -37,6 +38,9 @@ class SIPClient:
         user: str,
         credentials_manager: CredentialsManager,
         bind_ip="0.0.0.0",
+        bind_network="0.0.0.0/0",
+        hostname: Optional[str] = None,
+        remote_hostname: Optional[str] = None,
         bind_port=5060,
         call_callback: Optional[Callable[[SIPMessage], Optional[str]]] = None,
         transport_mode: TransportMode = TransportMode.UDP,
@@ -49,6 +53,7 @@ class SIPClient:
         self.port = port
         self.bind_ip = bind_ip
         self.bind_port = bind_port
+        self.nat = NAT(bind_ip, bind_network, hostname, remote_hostname)
         self.user = user
         self.credentials_manager = credentials_manager
         self.transport_mode = transport_mode
@@ -285,6 +290,31 @@ class SIPClient:
         params = params if params else ""
         return f"{method}:{user}{password}@{host}{port_str}{params}"
 
+    def __gen_via(self, to: str, branch: str) -> str:
+        # SIP/2.0/ should still be the prefix even if using TLS per RFC 3261
+        # 8.1.1.7, as shown in RFC 5630 6.1
+        return (
+            "Via: "
+            + f"SIP/2.0/{str(self.transport_mode)}"
+            + f" {self.nat.get_host(to)}:{self.bind_port};branch={branch}\r\n"
+        )
+
+    def __gen_contact(
+        self,
+        method: str,
+        user: str,
+        host: str,
+        password: Optional[str] = None,
+        port=5060,
+        uriparams: Optional[str] = None,
+        params: list[str] = [],
+    ) -> str:
+        uri = self.__gen_uri(method, user, host, password, port, uriparams)
+        uri = f"<{uri}>"
+        if params:
+            uri += ";" + (";".join(params))
+        return f"Contact: {uri}\r\n"
+
     def __gen_user_agent(self) -> str:
         return f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
 
@@ -484,12 +514,8 @@ class SIPClient:
 
     def gen_first_request(self, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server}:{self.port} SIP/2.0\r\n"
-        regRequest += (
-            "Via: SIP/2.0/"
-            + str(self.transport_mode)
-            + f" {self.bind_ip}:{self.bind_port};"
-            + f"branch={self.gen_branch()};rport\r\n"
-        )
+        regRequest += self.__gen_via(self.server, self.gen_branch())
+
         regRequest += (
             f'From: "{self.user}" '
             + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>;tag="
@@ -501,13 +527,14 @@ class SIPClient:
         )
         regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
-        regRequest += (
-            "Contact: "
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
-            + "transport="
-            + str(self.transport_mode)
-            + ">;+sip.instance="
-            + f'"<urn:uuid:{self.urnUUID}>"\r\n'
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        trans_mode = str(self.transport_mode)
+        regRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            uriparams=f";transport={trans_mode}",
+            params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += "Max-Forwards: 70\r\n"
@@ -525,12 +552,7 @@ class SIPClient:
 
     def gen_subscribe(self, response: SIPMessage) -> str:
         subRequest = f"SUBSCRIBE sip:{self.user}@{self.server} SIP/2.0\r\n"
-        subRequest += (
-            "Via: SIP/2.0/"
-            + str(self.transport_mode)
-            + f" {self.bind_ip}:{self.bind_port};"
-            + f"branch={self.gen_branch()};rport\r\n"
-        )
+        subRequest += self.__gen_via(self.server, self.gen_branch())
         subRequest += (
             f'From: "{self.user}" '
             + f"<sip:{self.user}@{self.server}>;tag="
@@ -540,13 +562,14 @@ class SIPClient:
         subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
         subRequest += f"CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n"
         # TODO: check if transport is needed
-        subRequest += (
-            "Contact: "
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
-            + "transport="
-            + str(self.transport_mode)
-            + ">;+sip.instance="
-            + f'"<urn:uuid:{self.urnUUID}>"\r\n'
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        trans_mode = str(self.transport_mode)
+        subRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            uriparams=f";transport={trans_mode}",
+            params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
         subRequest += "Max-Forwards: 70\r\n"
         subRequest += self.__gen_user_agent()
@@ -560,12 +583,7 @@ class SIPClient:
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server}:{self.port} SIP/2.0\r\n"
-        regRequest += (
-            "Via: SIP/2.0/"
-            + str(self.transport_mode)
-            + f" {self.bind_ip}:{self.bind_port};branch="
-            + f"{self.gen_branch()};rport\r\n"
-        )
+        regRequest += self.__gen_via(self.server, self.gen_branch())
         regRequest += (
             f'From: "{self.user}" '
             + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>;tag="
@@ -578,13 +596,14 @@ class SIPClient:
         call_id = request.headers.get("Call-ID", self.gen_call_id())
         regRequest += f"Call-ID: {call_id}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
-        regRequest += (
-            "Contact: "
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port};"
-            + "transport="
-            + str(self.transport_mode)
-            + ">;+sip.instance="
-            + f'"<urn:uuid:{self.urnUUID}>"\r\n'
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        trans_mode = str(self.transport_mode)
+        regRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            uriparams=f";transport={trans_mode}",
+            params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += "Max-Forwards: 70\r\n"
@@ -703,9 +722,12 @@ class SIPClient:
             f"CSeq: {request.headers['CSeq']['check']} "
             + f"{request.headers['CSeq']['method']}\r\n"
         )
-        regRequest += (
-            "Contact: "
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        trans_mode = str(self.transport_mode)
+        regRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
         )
         # TODO: Add Supported
         regRequest += self.__gen_user_agent()
@@ -727,12 +749,12 @@ class SIPClient:
     ) -> str:
         # Generate body first for content length
         body = "v=0\r\n"
-        # TODO: Check IPv4/IPv6
         body += (
-            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.bind_ip}\r\n"
+            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP"
+            + f"{self.nat.bind_ip.version} {self.bind_ip}\r\n"
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
-        body += f"c=IN IP4 {self.bind_ip}\r\n"  # TODO: Check IPv4/IPv6
+        body += f"c=IN IP{self.nat.bind_ip.version} {self.bind_ip}\r\n"
         body += "t=0 0\r\n"
         for x in ms:
             # TODO: Check AVP mode from request
@@ -759,24 +781,21 @@ class SIPClient:
             uri_method, number, self.server, port=self.port
         )
         invRequest = f"INVITE {to_uri} SIP/2.0\r\n"
-        invRequest += (
-            "Via: SIP/2.0/"
-            + str(self.transport_mode)
-            + f" {self.bind_ip}:{self.bind_port};branch="
-            + f"{branch}\r\n"
-        )
+        invRequest += self.__gen_via(self.server, branch)
         invRequest += "Max-Forwards: 70\r\n"
-        uri = self.__gen_uri(
-            uri_method, self.user, self.bind_ip, port=self.bind_port
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        invRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
         )
-        invRequest += f"Contact: <{uri}>\r\n"
         invRequest += self.__gen_from_to(
             "To", number, self.server, port=self.port
         )
         invRequest += self.__gen_from_to(
             "From",
             self.user,
-            self.bind_ip,
+            self.nat.get_host(self.server),
             port=self.bind_port,
             header_parms=f";tag={tag}",
         )
@@ -808,9 +827,11 @@ class SIPClient:
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         cseq = request.headers["CSeq"]["check"]
         byeRequest += f"CSeq: {cseq} {cmd}\r\n"
-        byeRequest += (
-            "Contact: "
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        byeRequest += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
         )
         byeRequest += self.__gen_user_agent()
         byeRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -852,9 +873,7 @@ class SIPClient:
         via = ""
         for h_via in request.headers["Via"]:
             v_line = (
-                "Via: SIP/2.0/"
-                + str(self.transport_mode)
-                + " "
+                f"Via: {h_via['type']} "
                 + f'{h_via["address"][0]}:{h_via["address"][1]}'
             )
             if "branch" in h_via.keys():
@@ -925,10 +944,7 @@ class SIPClient:
         self, number: str, body: str, ctype: str, branch: str, call_id: str
     ) -> str:
         msg = f"MESSAGE sip:{number}@{self.server} SIP/2.0\r\n"
-        msg += (
-            f"Via: SIP/2.0/{self.transport_mode} "
-            + f"{self.bind_ip}:{self.bind_port};branch={branch}\r\n"
-        )
+        msg += self.__gen_via(self.server, branch)
         msg += "Max-Forwards: 70\r\n"
         msg += f"To: <sip:{number}@{self.server}>\r\n"
         msg += (
