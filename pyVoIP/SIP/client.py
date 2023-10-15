@@ -307,7 +307,7 @@ class SIPClient:
         password: Optional[str] = None,
         port=5060,
         uriparams: Optional[str] = None,
-        params: list[str] = [],
+        params: List[str] = [],
     ) -> str:
         uri = self.__gen_uri(method, user, host, password, port, uriparams)
         uri = f"<{uri}>"
@@ -723,7 +723,6 @@ class SIPClient:
             + f"{request.headers['CSeq']['method']}\r\n"
         )
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
-        trans_mode = str(self.transport_mode)
         regRequest += self.__gen_contact(
             method,
             self.user,
