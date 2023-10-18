@@ -340,6 +340,7 @@ class SIPMessage:
         self.headers: Dict[str, Any] = {"Via": []}
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
+        self.proxy_authentication: Dict[str,str]={}
         self.raw = data
         self.auth_match = re.compile(r'(\w+)=("[^",]+"|[^ \t,]+)')
         self.parse(data)
@@ -461,6 +462,15 @@ class SIPMessage:
                 header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
+        elif header=='Proxy-Authenticate':
+            dct={}
+            if 'nonce' in data:
+                dct['nonce']=re.findall(r'nonce="(.+?)"',data)[0]
+            if 'realm' in data:
+                dct['realm']=re.findall(r'realm="(.+?)"',data)[0]
+            if 'algorithm' in data:
+                dct['algorithm']=re.findall(r'algorithm=(.+?),',data)[0]
+            self.proxy_authentication.update(dct)
         else:
             self.headers[header] = data
 
@@ -804,6 +814,7 @@ class SIPClient:
         myIP="0.0.0.0",
         myPort=5060,
         callCallback: Optional[Callable[[SIPMessage], None]] = None,
+        auth_username:str = None
     ):
         self.NSD = False
         self.server = server
@@ -811,6 +822,7 @@ class SIPClient:
         self.myIP = myIP
         self.username = username
         self.password = password
+        self.auth_username=auth_username
 
         self.callCallback = callCallback
 
@@ -1058,7 +1070,7 @@ class SIPClient:
         return self.gen_authorization(request)
 
     def gen_authorization(self, request: SIPMessage) -> bytes:
-        realm = request.authentication["realm"]
+        realm = request.proxy_authentication["realm"]
         HA1 = self.username + ":" + realm + ":" + self.password
         HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
         HA2 = (
@@ -1069,7 +1081,7 @@ class SIPClient:
             + ";transport=UDP"
         )
         HA2 = hashlib.md5(HA2.encode("utf8")).hexdigest()
-        nonce = request.authentication["nonce"]
+        nonce = request.proxy_authentication["nonce"]
         response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
         response = hashlib.md5(response).hexdigest().encode("utf8")
 
@@ -1111,6 +1123,12 @@ class SIPClient:
             stacklevel=2,
         )
         return self.gen_first_response(deregister)
+
+    def compute_md5_response(self, username, realm, password, nonce, uri, method="REGISTER"):
+        ha1 = hashlib.md5(f"{username}:{realm}:{password}".encode()).hexdigest()
+        ha2 = hashlib.md5(f"{method}:{uri}".encode()).hexdigest()
+        response = hashlib.md5(f"{ha1}:{nonce}:{ha2}".encode()).hexdigest()
+        return response
 
     def gen_first_response(self, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
@@ -1200,8 +1218,9 @@ class SIPClient:
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
         response = str(self.genAuthorization(request), "utf8")
-        nonce = request.authentication["nonce"]
-        realm = request.authentication["realm"]
+        nonce = request.proxy_authentication["nonce"]
+        realm = request.proxy_authentication["realm"]
+        md5_response = self.compute_md5_response(self.auth_username, realm, self.password, nonce, f"sip:{self.server};transport=UDP")
 
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
@@ -1229,16 +1248,16 @@ class SIPClient:
         regRequest += f'Allow: {(", ".join(pyVoIP.SIPCompatibleMethods))}\r\n'
         regRequest += "Max-Forwards: 70\r\n"
         regRequest += "Allow-Events: org.3gpp.nwinitdereg\r\n"
+        regRequest += (
+            f'Proxy-Authorization: Digest username="{self.auth_username}",'
+            + f' realm="{realm}", nonce="{nonce}",'
+            + f' uri="sip:{self.server};transport=UDP",'
+            + f' response="{md5_response}", algorithm=MD5\r\n'
+        )
         regRequest += f"User-Agent: pyVoIP {pyVoIP.__version__}\r\n"
         regRequest += (
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
-        )
-        regRequest += (
-            f'Authorization: Digest username="{self.username}",'
-            + f'realm="{realm}",nonce="{nonce}",'
-            + f'uri="sip:{self.server};transport=UDP",'
-            + f'response="{response}",algorithm=MD5\r\n'
         )
         regRequest += "Content-Length: 0"
         regRequest += "\r\n\r\n"
@@ -1613,7 +1632,7 @@ class SIPClient:
         nonce = response.authentication["nonce"]
         realm = response.authentication["realm"]
         auth = (
-            f'Authorization: Digest username="{self.username}",realm='
+            f'Authorization: Digest username="{self.auth_username}",realm='
             + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
             + f'transport=UDP",response="{str(authhash, "utf8")}",'
             + "algorithm=MD5\r\n"
@@ -1653,7 +1672,7 @@ class SIPClient:
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
 
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(407):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response, deregister=True)
             self.out.sendto(
@@ -1706,6 +1725,7 @@ class SIPClient:
         else:
             raise TimeoutError("Registering on SIP Server timed out")
 
+        
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
         first_response = response
@@ -1717,7 +1737,7 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(407):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response)
             self.out.sendto(
@@ -1757,10 +1777,6 @@ class SIPClient:
             else:
                 raise TimeoutError("Registering on SIP Server timed out")
 
-        if response.status == SIPStatus(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
 
         # TODO: This must be done more reliable
         if response.status not in [
