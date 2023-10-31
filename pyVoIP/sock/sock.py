@@ -1,9 +1,13 @@
 from typing import List, Optional, Tuple, Union
+from pyVoIP import SIP_STATE_DB_LOCATION
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
 from pyVoIP.SIP import SIPMessage, SIPMessageType
+from pyVoIP.SIP.error import SIPParseError
+from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.sock.transport import TransportMode
 import json
 import math
+import pprint
 import pyVoIP
 import socket
 import sqlite3
@@ -48,12 +52,15 @@ class VoIPConnection:
     def send(self, data: Union[bytes, str]) -> None:
         if type(data) is str:
             data = data.encode("utf8")
-        msg = SIPMessage(data)
+        try:
+            msg = SIPMessage(data)
+        except SIPParseError:
+            return
         if not self.conn:  # If UDP
             if msg.type == SIPMessageType.REQUEST:
                 addr = (msg.to["host"], msg.to["port"])
             else:
-                addr = msg.headers["Via"][0]
+                addr = msg.headers["Via"][0]["address"]
             self.sock.s.sendto(data, addr)
         else:
             self.conn.send(data)
@@ -71,7 +78,7 @@ class VoIPConnection:
         )
         rows = result.fetchall()
         if rows:
-            print(f"Found remote: {rows[0][0]}")
+            # print(f"Found remote: {rows[0][0]}")
             self.remote_tag = rows[0][0]
 
     def recv(self, nbytes: int, timeout=0) -> bytes:
@@ -83,7 +90,7 @@ class VoIPConnection:
                 data = self.conn.recv(nbytes)
                 try:
                     msg = SIPMessage(data)
-                except Exception as e:
+                except SIPParseError as e:
                     br = self.sock.gen_bad_request(
                         connection=self, error=e, received=data
                     )
@@ -101,19 +108,33 @@ class VoIPConnection:
                 conn.row_factory = sqlite3.Row
                 sql = (
                     'SELECT * FROM "msgs" WHERE "call_id"=? AND "local_tag"=?'
-                    + (""" AND "remote_tag" = ?""" if self.remote_tag else "")
                 )
+                if self.remote_tag:
+                    sql += (
+                        ' UNION SELECT * FROM "msgs" WHERE "call_id"=? AND '
+                        + '"local_tag"=? AND "remote_tag"=?'
+                    )
                 bindings = (
-                    (self.call_id, self.local_tag, self.remote_tag)
+                    (
+                        self.call_id,
+                        self.local_tag,
+                        self.call_id,
+                        self.local_tag,
+                        self.remote_tag,
+                    )
                     if self.remote_tag
                     else (self.call_id, self.local_tag)
                 )
                 result = conn.execute(sql, bindings)
                 row = result.fetchone()
                 if not row:
+                    conn.close()
                     continue
-                conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
                 try:
+                    self.sock.buffer.commit()
+                    conn.execute(
+                        'DELETE FROM "msgs" WHERE "id" = ?', (row["id"],)
+                    )
                     self.sock.buffer.commit()
                 except sqlite3.OperationalError:
                     pass
@@ -135,6 +156,7 @@ class VoIPSocket(threading.Thread):
         mode: TransportMode,
         bind_ip: str,
         bind_port: int,
+        nat: NAT,
         cert_file: Optional[str] = None,
         key_file: Optional[str] = None,
         key_password: KEY_PASSWORD = None,
@@ -148,6 +170,7 @@ class VoIPSocket(threading.Thread):
         self.s = socket.socket(socket.AF_INET, mode.socket_type)
         self.bind_ip: str = bind_ip
         self.bind_port: int = bind_port
+        self.nat = nat
         self.server_context: Optional[ssl.SSLContext] = None
         if mode.tls_mode:
             self.server_context = ssl.SSLContext(
@@ -160,7 +183,9 @@ class VoIPSocket(threading.Thread):
                 )
             self.s = self.server_context.wrap_socket(self.s, server_side=True)
 
-        self.buffer = sqlite3.connect(":memory:", check_same_thread=False)
+        self.buffer = sqlite3.connect(
+            SIP_STATE_DB_LOCATION, check_same_thread=False
+        )
         """
         RFC 3261 Section 12, Paragraph 2 states:
         "A dialog is identified at each UA with a dialog ID, which consists
@@ -319,9 +344,9 @@ class VoIPSocket(threading.Thread):
         if self.mode is not TransportMode.UDP:
             return
         self.conns_lock.acquire()
-        print(f"Deregistering {connection}")
-        print(f"{self.conns=}")
-        print(self.get_database_dump())
+        debug(f"Deregistering {connection}")
+        debug(f"{self.conns=}")
+        debug(self.get_database_dump())
         try:
             conn = self.buffer.cursor()
             result = conn.execute(
@@ -348,57 +373,38 @@ class VoIPSocket(threading.Thread):
             pass
         finally:
             conn.close()
-            print("Deregistered")
-            print(f"{self.conns=}")
-            print(self.get_database_dump())
             self.conns_lock.release()
 
-    def get_database_dump(self) -> str:
+    def get_database_dump(self, pretty=False) -> str:
         conn = self.buffer.cursor()
         ret = ""
         try:
             result = conn.execute('SELECT * FROM "listening";')
-            ret += "listening: " + json.dumps(result.fetchall()) + "\n\n"
+            result1 = result.fetchall()
             result = conn.execute('SELECT * FROM "msgs";')
-            ret += "msgs: " + json.dumps(result.fetchall()) + "\n\n"
+            result2 = result.fetchall()
         finally:
             conn.close()
-            return ret
+        if pretty:
+            ret += "listening: " + pprint.pformat(result1) + "\n\n"
+            ret += "msgs: " + pprint.pformat(result2) + "\n\n"
+        else:
+            ret += "listening: " + json.dumps(result1) + "\n\n"
+            ret += "msgs: " + json.dumps(result2) + "\n\n"
+        return ret
 
     def determine_tags(self, message: SIPMessage) -> Tuple[str, str]:
         """
         Return local_tag, remote_tag
         """
-        # TODO: Eventually NAT will be supported for people who don't have a SIP ALG
-        # We will need to take that into account when determining the remote tag.
 
         to_header = message.headers["To"]
         from_header = message.headers["From"]
         to_host = to_header["host"]
-        to_port = to_header["port"]
         to_tag = to_header["tag"] if to_header["tag"] else None
-        from_host = from_header["host"]
-        from_port = from_header["port"]
         from_tag = from_header["tag"] if from_header["tag"] else None
 
-        if to_host == self.bind_ip and to_port == self.bind_port and to_tag:
-            return to_tag, from_tag
-        elif from_host == self.bind_ip and from_port == self.bind_port:
-            return from_tag, to_tag
-        # If there is not an exact match, see if the host at least matches.
-        # (But not if the hosts are the same) as asterisk likes to strip
-        # ports.
-        elif to_host != from_host:
-            if to_host == self.bind_ip:
-                return to_tag, from_tag
-            elif from_host == self.bind_ip:
-                return from_tag, to_tag
-        # If there is still not a match, guess the to or from tag based
-        # on if the message. Requests except ACK likely have us as To,
-        # for everthing else we're likely the From
-        elif (
-            message.type == SIPMessageType.REQUEST and message.method != "ACK"
-        ):
+        if self.nat.check_host(to_host) is AddressType.LOCAL:
             return to_tag, from_tag
         return from_tag, to_tag
 
@@ -421,7 +427,10 @@ class VoIPSocket(threading.Thread):
                     data = self.s.recv(8192)
                 except OSError:
                     continue
-                message = SIPMessage(data)
+                try:
+                    message = SIPMessage(data)
+                except SIPParseError:
+                    continue
                 debug("\n\nReceived UDP Message:")
                 debug(message.summary())
             else:
@@ -431,7 +440,10 @@ class VoIPSocket(threading.Thread):
                     continue
                 debug(f"Received new {self.mode} connection from {addr}.")
                 data = conn.recv(8192)
-                message = SIPMessage(data)
+                try:
+                    message = SIPMessage(data)
+                except SIPParseError:
+                    continue
                 debug("\n\nReceived SIP Message:")
                 debug(message.summary())
 

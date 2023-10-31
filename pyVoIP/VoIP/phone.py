@@ -311,6 +311,7 @@ class VoIPPhone:
             except InvalidStateError:
                 pass
         self.sip.stop()
+        self.NSD = False
         self._status = PhoneStatus.INACTIVE
 
     def call(

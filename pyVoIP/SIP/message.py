@@ -313,7 +313,12 @@ class SIPMessage:
             "v": "Via",
         }
 
-        self.parse(data)
+        try:
+            self.parse(data)
+        except Exception as e:
+            if type(e) is not SIPParseError:
+                raise SIPParseError(e)
+            raise
 
     def summary(self) -> str:
         data = ""

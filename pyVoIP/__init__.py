@@ -50,6 +50,17 @@ TLS_CHECK_HOSTNAME = True
 # https://docs.python.org/3/library/ssl.html#ssl.SSLContext.verify_mode
 TLS_VERIFY_MODE = ssl.CERT_REQUIRED
 
+"""
+DO NOT CHANGE IN PRODUCTION.
+
+This variable allows you to save the SIP message state database to a file
+instead of storing it in memory which is the default.  This is useful for
+debugging, however pyVoIP does not delete the database afterwards which will
+cause an Exception upon restarting pyVoIP.  For this reason, we recommend you
+do not change this variable in production.
+"""
+SIP_STATE_DB_LOCATION = ":memory:"
+
 
 def set_tls_security(verify_mode: ssl.VerifyMode) -> None:
     """

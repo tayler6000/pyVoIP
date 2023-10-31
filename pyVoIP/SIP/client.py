@@ -30,6 +30,13 @@ if TYPE_CHECKING:
 debug = pyVoIP.debug
 
 
+UNAUTORIZED_RESPONSE_CODES = [
+    SIPStatus.UNAUTHORIZED,
+    SIPStatus.PROXY_AUTHENTICATION_REQUIRED,
+]
+INVITE_OK_RESPONSE_CODES = [SIPStatus.TRYING, SIPStatus.RINGING, SIPStatus.OK]
+
+
 class SIPClient:
     def __init__(
         self,
@@ -185,6 +192,7 @@ class SIPClient:
             self.transport_mode,
             self.bind_ip,
             self.bind_port,
+            self.nat,
             self.cert_file,
             self.key_file,
             self.key_password,
@@ -198,9 +206,11 @@ class SIPClient:
         self.s.start()
         # TODO: Check if we need to register with a server or proxy.
         self.register()
+        """
         t = Timer(1, self.recv)
         t.name = "SIP Receive"
         t.start()
+        """
 
     def stop(self) -> None:
         self.NSD = False
@@ -533,6 +543,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
             uriparams=f";transport={trans_mode}",
             params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
@@ -568,6 +579,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
             uriparams=f";transport={trans_mode}",
             params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
@@ -602,6 +614,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
             uriparams=f";transport={trans_mode}",
             params=[f'+sip.instance="<urn:uuid:{self.urnUUID}>"'],
         )
@@ -727,6 +740,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
         )
         # TODO: Add Supported
         regRequest += self.__gen_user_agent()
@@ -787,6 +801,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
         )
         invRequest += self.__gen_from_to(
             "To", number, self.server, port=self.port
@@ -831,6 +846,7 @@ class SIPClient:
             method,
             self.user,
             self.nat.get_host(self.server),
+            port=self.bind_port,
         )
         byeRequest += self.__gen_user_agent()
         byeRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
@@ -905,10 +921,8 @@ class SIPClient:
         response = SIPMessage(conn.recv(8192))
 
         while (
-            response.status != SIPStatus(401)
-            and response.status != SIPStatus(407)
-            and response.status != SIPStatus(100)
-            and response.status != SIPStatus(180)
+            response.status
+            not in UNAUTORIZED_RESPONSE_CODES + INVITE_OK_RESPONSE_CODES
         ) or response.headers["Call-ID"] != call_id:
             if not self.NSD:
                 break
@@ -918,14 +932,16 @@ class SIPClient:
 
         debug(f"Received Response: {response.summary()}")
 
-        if response.status == SIPStatus(100) or response.status == SIPStatus(
-            180
-        ):
-            debug("Invite status OK")
-            return SIPMessage(invite.encode("utf8")), call_id, sess_id
+        if response.status in INVITE_OK_RESPONSE_CODES:
+            debug("Invite Accepted")
+            if response.status is SIPStatus.OK:
+                return response, call_id, sess_id, conn
+            return SIPMessage(invite.encode("utf8")), call_id, sess_id, conn
+        debug("Invite Requires Authorization")
         ack = self.gen_ack(response)
         conn.send(ack)
         debug("Acknowledged")
+        conn.close()  # End of Dialog
         auth = self.gen_authorization(response)
 
         invite = self.gen_invite(
@@ -935,7 +951,7 @@ class SIPClient:
             "\r\nContent-Length", f"\r\n{auth}Content-Length"
         )
 
-        conn.send(invite)
+        conn = self.sendto(invite)
 
         return SIPMessage(invite.encode("utf8")), call_id, sess_id, conn
 

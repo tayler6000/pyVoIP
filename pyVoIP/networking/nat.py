@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Optional
 import ipaddress
 import socket
@@ -5,6 +6,13 @@ import socket
 
 class NATError(Exception):
     pass
+
+
+class AddressType(Enum):
+    """Used for determining remote or local tags in SIP messages"""
+
+    REMOTE = 0
+    LOCAL = 1
 
 
 class NAT:
@@ -26,7 +34,7 @@ class NAT:
             ip = ipaddress.ip_address(host)
         except ValueError:
             try:
-                ip = socket.gethostbyname(host)
+                ip = ipaddress.ip_address(socket.gethostbyname(host))
             except socket.gaierror:
                 raise NATError(f"Unable to resolve hostname {host}")
 
@@ -39,3 +47,21 @@ class NAT:
                 "No remote hostname specified, "
                 + "cannot provide a return path for remote hosts."
             )
+
+    def check_host(self, host: str) -> AddressType:
+        """Determine if a host is a remote computer or not."""
+        if host in [self.remote_hostname, self.hostname]:
+            return AddressType.LOCAL
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip == self.bind_ip:
+                return AddressType.LOCAL
+            return AddressType.REMOTE
+        except ValueError:
+            try:
+                ip = ipaddress.ip_address(socket.gethostbyname(host))
+                if ip == self.bind_ip:
+                    return AddressType.LOCAL
+                return AddressType.REMOTE
+            except socket.gaierror:
+                return AddressType.REMOTE
