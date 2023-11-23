@@ -1648,6 +1648,7 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
+            self.recvLock.release()
             raise TimeoutError("Deregistering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1667,6 +1668,7 @@ class SIPClient:
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
+                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1680,6 +1682,7 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
+                self.recvLock.release()
                 raise TimeoutError("Deregistering on SIP Server timed out")
 
         if response.status == SIPStatus(500):
@@ -1704,6 +1707,7 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
+            self.recvLock.release()
             raise TimeoutError("Registering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1742,6 +1746,7 @@ class SIPClient:
                     debug("\nRECEIVED")
                     debug(response.summary())
                     debug("=" * 50)
+                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1755,6 +1760,7 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
+                self.recvLock.release()
                 raise TimeoutError("Registering on SIP Server timed out")
 
         if response.status == SIPStatus(407):
