@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
 import hashlib
 import socket
@@ -13,6 +14,7 @@ import warnings
 
 
 if TYPE_CHECKING:
+    from pyVoIP.VoIP import VoIPPhone
     from pyVoIP import RTP
 
 
@@ -801,9 +803,11 @@ class SIPClient:
         port: int,
         username: str,
         password: str,
+        phone: "VoIPPhone",
         myIP="0.0.0.0",
         myPort=5060,
         callCallback: Optional[Callable[[SIPMessage], None]] = None,
+        fatalCallback: Optional[Callable[..., None]] = None,
     ):
         self.NSD = False
         self.server = server
@@ -812,7 +816,10 @@ class SIPClient:
         self.username = username
         self.password = password
 
+        self.phone = phone
+
         self.callCallback = callCallback
+        self.fatalCallback = fatalCallback
 
         self.tags: List[str] = []
         self.tagLibrary = {"register": self.genTag()}
@@ -832,6 +839,7 @@ class SIPClient:
         self.urnUUID = self.gen_urn_uuid()
 
         self.registerThread: Optional[Timer] = None
+        self.registerFailures = 0
         self.recvLock = Lock()
 
     def recv(self) -> None:
@@ -952,6 +960,8 @@ class SIPClient:
         t.start()
 
     def stop(self) -> None:
+        if not self.NSD:
+            return
         self.NSD = False
         if self.registerThread:
             # Only run if registerThread exists
@@ -1638,7 +1648,24 @@ class SIPClient:
         self.out.sendto(message.encode("utf8"), (self.server, self.port))
 
     def deregister(self) -> bool:
+        try:
+            deregistered = self.__deregister()
+            if not deregistered:
+                debug("DEREGISTERATION FAILED")
+                return False
+            else:
+                self.phone._status = PhoneStatus.INACTIVE
+
+            return deregistered
+        except BaseException as e:
+            debug(f"DEREGISTERATION ERROR: {e}")
+            if type(e) is OSError:
+                raise
+            return False
+
+    def __deregister(self) -> bool:
         self.recvLock.acquire()
+        self.phone._status = PhoneStatus.DEREGISTERING
         firstRequest = self.genFirstRequest(deregister=True)
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
 
@@ -1648,6 +1675,7 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
+            self.recvLock.release()
             raise TimeoutError("Deregistering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1667,6 +1695,7 @@ class SIPClient:
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
+                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1680,6 +1709,7 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
+                self.recvLock.release()
                 raise TimeoutError("Deregistering on SIP Server timed out")
 
         if response.status == SIPStatus(500):
@@ -1694,7 +1724,47 @@ class SIPClient:
         return False
 
     def register(self) -> bool:
+        try:
+            registered = self.__register()
+            if not registered:
+                debug("REGISTERATION FAILED")
+                self.registerFailures += 1
+            else:
+                self.phone._status = PhoneStatus.REGISTERED
+                self.registerFailures = 0
+
+            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+                debug("Too many registration failures, stopping.")
+                self.stop()
+                self.fatalCallback()
+                return False
+            self.__start_register_timer()
+
+            return registered
+        except BaseException as e:
+            debug(f"REGISTERATION ERROR: {e}")
+            self.registerFailures += 1
+            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+                self.stop()
+                self.fatalCallback()
+                return False
+            self.__start_register_timer(delay=0)
+
+    def __start_register_timer(self, delay: Optional[int] = None):
+        if delay is None:
+            delay = self.default_expires - 5
+        if self.NSD:
+            debug("New register thread")
+            # self.subscribe(response)
+            self.registerThread = Timer(delay, self.register)
+            self.registerThread.name = (
+                "SIP Register CSeq: " + f"{self.registerCounter.x}"
+            )
+            self.registerThread.start()
+
+    def __register(self) -> bool:
         self.recvLock.acquire()
+        self.phone._status = PhoneStatus.REGISTERING
         firstRequest = self.genFirstRequest()
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
 
@@ -1704,6 +1774,7 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
+            self.recvLock.release()
             raise TimeoutError("Registering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1742,6 +1813,7 @@ class SIPClient:
                     debug("\nRECEIVED")
                     debug(response.summary())
                     debug("=" * 50)
+                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1755,6 +1827,7 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
+                self.recvLock.release()
                 raise TimeoutError("Registering on SIP Server timed out")
 
         if response.status == SIPStatus(407):
@@ -1782,15 +1855,6 @@ class SIPClient:
 
         self.recvLock.release()
         if response.status == SIPStatus.OK:
-            if self.NSD:
-                # self.subscribe(response)
-                self.registerThread = Timer(
-                    self.default_expires - 5, self.register
-                )
-                self.registerThread.name = (
-                    "SIP Register CSeq: " + f"{self.registerCounter.x}"
-                )
-                self.registerThread.start()
             return True
         else:
             raise InvalidAccountInfoError(

@@ -1,5 +1,6 @@
 from enum import Enum
 from pyVoIP import SIP, RTP
+from pyVoIP.VoIP.status import PhoneStatus
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional
 import audioop
@@ -39,14 +40,6 @@ class CallState(Enum):
     RINGING = "RINGING"
     ANSWERED = "ANSWERED"
     ENDED = "ENDED"
-
-
-class PhoneStatus(Enum):
-    INACTIVE = "INACTIVE"
-    REGISTERING = "REGISTERING"
-    REGISTERED = "REGISTERED"
-    DEREGISTERING = "DEREGISTERING"
-    FAILED = "FAILED"
 
 
 class VoIPCall:
@@ -521,9 +514,11 @@ class VoIPPhone:
             port,
             username,
             password,
+            phone=self,
             myIP=self.myIP,
             myPort=sipPort,
             callCallback=self.callback,
+            fatalCallback=self.fatal,
         )
 
     def callback(self, request: SIP.SIPMessage) -> None:
@@ -666,7 +661,6 @@ class VoIPPhone:
         self._status = PhoneStatus.REGISTERING
         try:
             self.sip.start()
-            self._status = PhoneStatus.REGISTERED
             self.NSD = True
         except Exception:
             self._status = PhoneStatus.FAILED
@@ -674,7 +668,7 @@ class VoIPPhone:
             self.NSD = False
             raise
 
-    def stop(self) -> None:
+    def stop(self, failed=False) -> None:
         self._status = PhoneStatus.DEREGISTERING
         for x in self.calls.copy():
             try:
@@ -683,6 +677,11 @@ class VoIPPhone:
                 pass
         self.sip.stop()
         self._status = PhoneStatus.INACTIVE
+        if failed:
+            self._status = PhoneStatus.FAILED
+
+    def fatal(self) -> None:
+        self.stop(failed=True)
 
     def call(self, number: str) -> VoIPCall:
         port = self.request_port()
