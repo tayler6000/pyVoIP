@@ -49,7 +49,9 @@ class SIPClient:
         hostname: Optional[str] = None,
         remote_hostname: Optional[str] = None,
         bind_port=5060,
-        call_callback: Optional[Callable[[SIPMessage], Optional[str]]] = None,
+        call_callback: Optional[
+            Callable[["VoIPConnection", SIPMessage], Optional[str]]
+        ] = None,
         transport_mode: TransportMode = TransportMode.UDP,
         cert_file: Optional[str] = None,
         key_file: Optional[str] = None,
@@ -120,6 +122,20 @@ class SIPClient:
                     if pyVoIP.DEBUG:
                         raise
 
+    def handle_new_connection(self, conn: "VoIPConnection") -> None:
+        message = SIPMessage(conn.peak())
+        if message.type == SIPMessageType.REQUEST:
+            if message.method == "INVITE":
+                self._handle_invite(conn)
+
+    def _handle_invite(self, conn: "VoIPConnection") -> None:
+        message = SIPMessage(conn.peak())
+        if self.call_callback is None:
+            request = self.gen_busy(message)
+            conn.send(request)
+        else:
+            self.call_callback(conn, message)
+
     def parse_message(self, message: SIPMessage) -> None:
         if message.type != SIPMessageType.REQUEST:
             if message.status in (
@@ -143,12 +159,6 @@ class SIPClient:
                     "TODO: Add 500 Error on Receiving SIP Response",
                 )
             return
-        elif message.method == "INVITE":
-            if self.call_callback is None:
-                request = self.gen_busy(message)
-                self.sendto(request, message.headers["Via"]["address"])
-            else:
-                self.call_callback(message)
         elif message.method == "BYE":
             # TODO: If callCallback is None, the call doesn't exist, 481
             if self.call_callback:
@@ -192,7 +202,7 @@ class SIPClient:
             self.transport_mode,
             self.bind_ip,
             self.bind_port,
-            self.nat,
+            self,
             self.cert_file,
             self.key_file,
             self.key_password,

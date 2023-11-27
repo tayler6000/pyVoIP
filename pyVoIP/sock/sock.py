@@ -1,5 +1,4 @@
-from typing import List, Optional, Tuple, Union
-from pyVoIP import SIP_STATE_DB_LOCATION
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
 from pyVoIP.SIP import SIPMessage, SIPMessageType
 from pyVoIP.SIP.error import SIPParseError
@@ -14,6 +13,10 @@ import sqlite3
 import ssl
 import threading
 import time
+
+
+if TYPE_CHECKING:
+    from pyVoIP.SIP.client import SIPClient
 
 
 debug = pyVoIP.debug
@@ -38,6 +41,7 @@ class VoIPConnection:
         self.local_tag, self.remote_tag = self.sock.determine_tags(
             self.message
         )
+        self._peak_buffer: Optional[bytes] = None
         if conn and message.type == SIPMessageType.REQUEST:
             if self.sock.mode.tls_mode:
                 client_context = ssl.create_default_context()
@@ -66,85 +70,80 @@ class VoIPConnection:
             self.conn.send(data)
         debug(f"SENT:\n{msg.summary()}")
 
-    def __find_remote_tag(self) -> None:
-        if self.remote_tag is not None:
-            return
-        conn = self.sock.buffer.cursor()
-        result = conn.execute(
-            """SELECT "remote_tag" FROM "listening" WHERE
-                "call_id" = ?
-                AND "local_tag" = ?""",
-            (self.call_id, self.local_tag),
-        )
-        rows = result.fetchall()
-        if rows:
-            # print(f"Found remote: {rows[0][0]}")
-            self.remote_tag = rows[0][0]
+    def update_tags(self, local_tag: str, remote_tag: str) -> None:
+        self.local_tag = local_tag
+        self.remote_tag = remote_tag
 
-    def recv(self, nbytes: int, timeout=0) -> bytes:
-        timeout = time.monotonic() + timeout if timeout else math.inf
-        if self.conn:
-            # TODO: Timeout
-            msg = None
-            while not msg and not self.sock.SD:
-                data = self.conn.recv(nbytes)
-                try:
-                    msg = SIPMessage(data)
-                except SIPParseError as e:
-                    br = self.sock.gen_bad_request(
-                        connection=self, error=e, received=data
-                    )
-                    self.send(br)
-            if time.monotonic() >= timeout:
-                raise TimeoutError()
-            debug(f"RECEIVED:\n{msg.summary()}")
+    def peak(self) -> bytes:
+        return self.recv(8192, timeout=60, peak=True)
+
+    def recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+        if self._peak_buffer:
+            data = self._peak_buffer
+            if not peak:
+                self._peak_buffer = None
             return data
+        if self.conn:
+            return self._tcp_tls_recv(nbytes, timeout, peak)
         else:
-            self.__find_remote_tag()
-            while time.monotonic() <= timeout and not self.sock.SD:
-                # print("Trying to receive")
-                # print(self.sock.get_database_dump())
-                conn = self.sock.buffer.cursor()
-                conn.row_factory = sqlite3.Row
-                sql = (
-                    'SELECT * FROM "msgs" WHERE "call_id"=? AND "local_tag"=?'
+            return self._udp_recv(nbytes, timeout, peak)
+
+    def _tcp_tls_recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+        # TODO: Timeout
+        msg = None
+        while not msg and not self.sock.SD:
+            data = self.conn.recv(nbytes)
+            try:
+                msg = SIPMessage(data)
+            except SIPParseError as e:
+                br = self.sock.gen_bad_request(
+                    connection=self, error=e, received=data
                 )
-                if self.remote_tag:
-                    sql += (
-                        ' UNION SELECT * FROM "msgs" WHERE "call_id"=? AND '
-                        + '"local_tag"=? AND "remote_tag"=?'
-                    )
-                bindings = (
-                    (
-                        self.call_id,
-                        self.local_tag,
-                        self.call_id,
-                        self.local_tag,
-                        self.remote_tag,
-                    )
-                    if self.remote_tag
-                    else (self.call_id, self.local_tag)
-                )
-                result = conn.execute(sql, bindings)
-                row = result.fetchone()
-                if not row:
-                    conn.close()
-                    continue
-                try:
-                    self.sock.buffer.commit()
-                    conn.execute(
-                        'DELETE FROM "msgs" WHERE "id" = ?', (row["id"],)
-                    )
-                    self.sock.buffer.commit()
-                except sqlite3.OperationalError:
-                    pass
+                self.send(br)
+        if time.monotonic() >= timeout:
+            raise TimeoutError()
+        if peak:
+            self._peak_buffer = data
+        debug(f"RECEIVED:\n{msg.summary()}")
+        return data
+
+    def _udp_recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+        timeout = time.monotonic() + timeout if timeout else math.inf
+        while time.monotonic() <= timeout and not self.sock.SD:
+            # print("Trying to receive")
+            # print(self.sock.get_database_dump())
+            conn = self.sock.buffer.cursor()
+            conn.row_factory = sqlite3.Row
+            sql = (
+                'SELECT * FROM "msgs" WHERE "call_id"=? AND '
+                + '"local_tag" IS ? AND "remote_tag" IS ?'
+            )
+            bindings = (
+                self.call_id,
+                self.local_tag,
+                self.remote_tag,
+            )
+            result = conn.execute(sql, bindings)
+            row = result.fetchone()
+            if not row:
+                conn.close()
+                continue
+            if peak:
+                # If peaking, return before deleting from the database
                 conn.close()
                 return row["msg"].encode("utf8")
-            if time.monotonic() >= timeout:
-                raise TimeoutError()
+            try:
+                self.sock.buffer.commit()
+                conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
+                self.sock.buffer.commit()
+            except sqlite3.OperationalError:
+                pass
+            conn.close()
+            return row["msg"].encode("utf8")
+        if time.monotonic() >= timeout:
+            raise TimeoutError()
 
     def close(self):
-        self.__find_remote_tag()
         self.sock.deregister_connection(self)
         if self.conn:
             self.conn.close()
@@ -156,7 +155,7 @@ class VoIPSocket(threading.Thread):
         mode: TransportMode,
         bind_ip: str,
         bind_port: int,
-        nat: NAT,
+        sip: "SIPClient",
         cert_file: Optional[str] = None,
         key_file: Optional[str] = None,
         key_password: KEY_PASSWORD = None,
@@ -170,7 +169,8 @@ class VoIPSocket(threading.Thread):
         self.s = socket.socket(socket.AF_INET, mode.socket_type)
         self.bind_ip: str = bind_ip
         self.bind_port: int = bind_port
-        self.nat = nat
+        self.sip = sip
+        self.nat: NAT = sip.nat
         self.server_context: Optional[ssl.SSLContext] = None
         if mode.tls_mode:
             self.server_context = ssl.SSLContext(
@@ -184,7 +184,7 @@ class VoIPSocket(threading.Thread):
             self.s = self.server_context.wrap_socket(self.s, server_side=True)
 
         self.buffer = sqlite3.connect(
-            SIP_STATE_DB_LOCATION, check_same_thread=False
+            pyVoIP.SIP_STATE_DB_LOCATION, check_same_thread=False
         )
         """
         RFC 3261 Section 12, Paragraph 2 states:
@@ -209,7 +209,12 @@ class VoIPSocket(threading.Thread):
             );"""
         )
         conn.execute(
-            """CREATE INDEX "msg_index" ON msgs ("call_id", "local_tag", "remote_tag");"""
+            """CREATE INDEX "msg_index" ON msgs """
+            + """("call_id", "local_tag", "remote_tag");"""
+        )
+        conn.execute(
+            """CREATE INDEX "msg_index_2" ON msgs """
+            + """("call_id", "remote_tag", "local_tag");"""
         )
         conn.execute(
             """CREATE TABLE "listening" (
@@ -271,12 +276,13 @@ class VoIPSocket(threading.Thread):
                 sql = 'UPDATE "listening" SET "remote_tag" = ?, '
                 sql += '"local_tag" = ? WHERE "connection" = ?'
                 conn.execute(sql, (remote_tag, local_tag, rows[0][0]))
+                self.conns[rows[0][0]].update_tags(local_tag, remote_tag)
             conn.close()
             return self.conns[rows[0][0]]
         conn.close()
         return None
 
-    def __register_connection(self, connection: VoIPConnection) -> None:
+    def __register_connection(self, connection: VoIPConnection) -> int:
         self.conns_lock.acquire()
         self.conns.append(connection)
         conn_id = len(self.conns) - 1
@@ -311,6 +317,7 @@ class VoIPSocket(threading.Thread):
         finally:
             conn.close()
             self.conns_lock.release()
+            return conn_id
 
     def deregister_connection(self, connection: VoIPConnection) -> None:
         if self.mode is not TransportMode.UDP:
@@ -424,8 +431,11 @@ class VoIPSocket(threading.Thread):
     def _handle_incoming_message(
         self, conn: Optional[SOCKETS], message: SIPMessage
     ):
+        conn_id = None
         if not self.__connection_exists(message):
-            self.__register_connection(VoIPConnection(self, conn, message))
+            conn_id = self.__register_connection(
+                VoIPConnection(self, conn, message)
+            )
 
         call_id = message.headers["Call-ID"]
         local_tag, remote_tag = self.determine_tags(message)
@@ -441,6 +451,8 @@ class VoIPSocket(threading.Thread):
         except sqlite3.OperationalError:
             pass
         conn.close()
+        if conn_id:
+            self.sip.handle_new_connection(self.conns[conn_id])
 
     def run(self) -> None:
         self.bind((self.bind_ip, self.bind_port))

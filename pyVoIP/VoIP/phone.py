@@ -1,6 +1,7 @@
 from enum import Enum
 from pyVoIP import SIP, RTP
 from pyVoIP.credentials import CredentialsManager
+from pyVoIP.sock.sock import VoIPConnection
 from pyVoIP.sock.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
 from pyVoIP.VoIP.call import CallState, VoIPCall
@@ -101,12 +102,14 @@ class VoIPPhone:
             transport_mode=self.transport_mode,
         )
 
-    def callback(self, request: SIP.SIPMessage) -> Optional[str]:
+    def callback(
+        self, conn: VoIPConnection, request: SIP.SIPMessage
+    ) -> Optional[str]:
         # debug("Callback: "+request.summary())
         if request.type == pyVoIP.SIP.SIPMessageType.REQUEST:
             # debug("This is a message")
             if request.method == "INVITE":
-                self._callback_MSG_Invite(request)
+                self._callback_MSG_Invite(conn, request)
             elif request.method == "BYE":
                 self._callback_MSG_Bye(request)
             elif request.method == "OPTIONS":
@@ -131,23 +134,13 @@ class VoIPPhone:
     def get_status(self) -> PhoneStatus:
         return self._status
 
-    def _callback_MSG_Invite(self, request: SIP.SIPMessage) -> None:
+    def _callback_MSG_Invite(
+        self, conn: VoIPConnection, request: SIP.SIPMessage
+    ) -> None:
         call_id = request.headers["Call-ID"]
-        if call_id in self.calls:
-            debug("Re-negotiation detected!")
-            # TODO: this seems "dangerous" if for some reason sip server
-            # handles 2 and more bindings it will cause duplicate RTP-Clients
-            # to spawn.
-
-            # CallState.Ringing seems important here to prevent multiple
-            # answering and RTP-Client spawning. Find out when renegotiation
-            # is relevant.
-            if self.calls[call_id].state != CallState.RINGING:
-                self.calls[call_id].renegotiate(request)
-            return  # Raise Error
         if self.callClass is None:
             message = self.sip.gen_busy(request)
-            self.sip.sendto(message, request.headers["Via"][0]["address"])
+            conn.send(message)
         else:
             debug("New call!")
             sess_id = None
@@ -157,8 +150,8 @@ class VoIPPhone:
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
-            self.sip.sendto(message, request.headers["Via"][0]["address"])
-            call = self._create_Call(request, sess_id)
+            conn.send(message)
+            call = self._create_call(conn, request, sess_id)
             try:
                 t = Timer(1, call.ringing, [request])
                 t.name = f"Phone Call: {call_id}"
@@ -167,9 +160,8 @@ class VoIPPhone:
                 self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.gen_busy(request)
-                self.sip.sendto(
+                conn.send(
                     message,
-                    request.headers["Via"][0]["address"],
                 )
                 raise
 
@@ -275,7 +267,9 @@ class VoIPPhone:
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
-    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> VoIPCall:
+    def _create_call(
+        self, conn: VoIPConnection, request: SIP.SIPMessage, sess_id: int
+    ) -> VoIPCall:
         """
         Create VoIP call object. Should be separated to enable better
         subclassing.
@@ -287,6 +281,7 @@ class VoIPPhone:
             request,
             sess_id,
             self.bind_ip,
+            conn=conn,
             sendmode=self.recvmode,
         )
         return self.calls[call_id]
