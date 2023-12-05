@@ -1662,71 +1662,70 @@ class SIPClient:
             return deregistered
         except BaseException as e:
             debug(f"DEREGISTERATION ERROR: {e}")
+            # TODO: a maximum tries check should be implemented otherwise a
+            # RecursionError will throw
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.deregister()
             if type(e) is OSError:
                 raise
             return False
 
     def __deregister(self) -> bool:
-        # TODO: Can this safely be changed to use context manager syntax or
-        # does the 5s recursive deregister() ruin that?
-        self.recvLock.acquire()
-        self.phone._status = PhoneStatus.DEREGISTERING
-        firstRequest = self.genFirstRequest(deregister=True)
-        self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
-
-        self.out.setblocking(False)
-
-        ready = select.select([self.out], [], [], self.register_timeout)
-        if ready[0]:
-            resp = self.s.recv(8192)
-        else:
-            self.recvLock.release()
-            raise TimeoutError("Deregistering on SIP Server timed out")
-
-        response = SIPMessage(resp)
-        response = self.trying_timeout_check(response)
-
-        if response.status == SIPStatus(401):
-            # Unauthorized, likely due to being password protected.
-            regRequest = self.genRegister(response, deregister=True)
+        with self.recvLock:
+            self.phone._status = PhoneStatus.DEREGISTERING
+            firstRequest = self.genFirstRequest(deregister=True)
             self.out.sendto(
-                regRequest.encode("utf8"), (self.server, self.port)
+                firstRequest.encode("utf8"), (self.server, self.port)
             )
-            ready = select.select([self.s], [], [], self.register_timeout)
+
+            self.out.setblocking(False)
+
+            ready = select.select([self.out], [], [], self.register_timeout)
             if ready[0]:
                 resp = self.s.recv(8192)
-                response = SIPMessage(resp)
-                if response.status == SIPStatus(401):
-                    # At this point, it's reasonable to assume that
-                    # this is caused by invalid credentials.
-                    debug("Unauthorized")
-                    self.recvLock.release()
-                    raise InvalidAccountInfoError(
-                        "Invalid Username or "
-                        + "Password for SIP server "
-                        + f"{self.server}:"
-                        + f"{self.myPort}"
-                    )
-                elif response.status == SIPStatus(400):
-                    # Bad Request
-                    # TODO: implement
-                    # TODO: check if broken connection can be brought back
-                    # with new urn:uuid or reply with expire 0
-                    self._handle_bad_request()
             else:
-                self.recvLock.release()
                 raise TimeoutError("Deregistering on SIP Server timed out")
 
-        if response.status == SIPStatus(500):
-            self.recvLock.release()
-            time.sleep(5)
-            return self.deregister()
+            response = SIPMessage(resp)
+            response = self.trying_timeout_check(response)
 
-        if response.status == SIPStatus.OK:
-            self.recvLock.release()
-            return True
-        self.recvLock.release()
-        return False
+            if response.status == SIPStatus(401):
+                # Unauthorized, likely due to being password protected.
+                regRequest = self.genRegister(response, deregister=True)
+                self.out.sendto(
+                    regRequest.encode("utf8"), (self.server, self.port)
+                )
+                ready = select.select([self.s], [], [], self.register_timeout)
+                if ready[0]:
+                    resp = self.s.recv(8192)
+                    response = SIPMessage(resp)
+                    if response.status == SIPStatus(401):
+                        # At this point, it's reasonable to assume that
+                        # this is caused by invalid credentials.
+                        debug("Unauthorized")
+                        raise InvalidAccountInfoError(
+                            "Invalid Username or "
+                            + "Password for SIP server "
+                            + f"{self.server}:"
+                            + f"{self.myPort}"
+                        )
+                    elif response.status == SIPStatus(400):
+                        # Bad Request
+                        # TODO: implement
+                        # TODO: check if broken connection can be brought back
+                        # with new urn:uuid or reply with expire 0
+                        self._handle_bad_request()
+                else:
+                    raise TimeoutError("Deregistering on SIP Server timed out")
+
+            if response.status == SIPStatus(500):
+                # We raise so the calling function can sleep and try again
+                raise RetryRequiredError("Response SIP status of 500")
+
+            if response.status == SIPStatus.OK:
+                return True
+            return False
 
     def register(self) -> bool:
         try:
