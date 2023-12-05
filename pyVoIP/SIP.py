@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from pyVoIP.util import acquired_lock_and_unblocked_socket
 from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
 import hashlib
@@ -849,14 +850,11 @@ class SIPClient:
     def recv_loop(self) -> None:
         while self.NSD:
             try:
-                with self.recvLock:
-                    self.s.setblocking(False)
+                with acquired_lock_and_unblocked_socket(self.recvLock, self.s):
                     self.recv()
             except BlockingIOError:
-                self.s.setblocking(True)
                 time.sleep(0.01)
                 continue
-            self.s.setblocking(True)
 
     def recv(self) -> None:
         try:
