@@ -844,6 +844,8 @@ class SIPClient:
 
     def recv(self) -> None:
         while self.NSD:
+            # TODO: Can this safely be changed to use context manager syntax
+            # or does the BlockingIOError handler ruin that?
             self.recvLock.acquire()
             self.s.setblocking(False)
             try:
@@ -1595,52 +1597,49 @@ class SIPClient:
         invite = self.genInvite(
             number, str(sess_id), ms, sendtype, branch, call_id
         )
-        self.recvLock.acquire()
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
-        debug("Invited")
-        response = SIPMessage(self.s.recv(8192))
-
-        while (
-            response.status != SIPStatus(401)
-            and response.status != SIPStatus(100)
-            and response.status != SIPStatus(180)
-        ) or response.headers["Call-ID"] != call_id:
-            if not self.NSD:
-                break
-            self.parseMessage(response)
+        with self.recvLock:
+            self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+            debug("Invited")
             response = SIPMessage(self.s.recv(8192))
 
-        if response.status == SIPStatus(100) or response.status == SIPStatus(
-            180
-        ):
-            self.recvLock.release()
+            while (
+                response.status != SIPStatus(401)
+                and response.status != SIPStatus(100)
+                and response.status != SIPStatus(180)
+            ) or response.headers["Call-ID"] != call_id:
+                if not self.NSD:
+                    break
+                self.parseMessage(response)
+                response = SIPMessage(self.s.recv(8192))
+
+            if response.status == SIPStatus(
+                100
+            ) or response.status == SIPStatus(180):
+                return SIPMessage(invite.encode("utf8")), call_id, sess_id
+            debug(f"Received Response: {response.summary()}")
+            ack = self.genAck(response)
+            self.out.sendto(ack.encode("utf8"), (self.server, self.port))
+            debug("Acknowledged")
+            authhash = self.genAuthorization(response)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'Authorization: Digest username="{self.username}",realm='
+                + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
+                + f'transport=UDP",response="{str(authhash, "utf8")}",'
+                + "algorithm=MD5\r\n"
+            )
+
+            invite = self.genInvite(
+                number, str(sess_id), ms, sendtype, branch, call_id
+            )
+            invite = invite.replace(
+                "\r\nContent-Length", f"\r\n{auth}Content-Length"
+            )
+
+            self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
-        debug(f"Received Response: {response.summary()}")
-        ack = self.genAck(response)
-        self.out.sendto(ack.encode("utf8"), (self.server, self.port))
-        debug("Acknowledged")
-        authhash = self.genAuthorization(response)
-        nonce = response.authentication["nonce"]
-        realm = response.authentication["realm"]
-        auth = (
-            f'Authorization: Digest username="{self.username}",realm='
-            + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
-            + f'transport=UDP",response="{str(authhash, "utf8")}",'
-            + "algorithm=MD5\r\n"
-        )
-
-        invite = self.genInvite(
-            number, str(sess_id), ms, sendtype, branch, call_id
-        )
-        invite = invite.replace(
-            "\r\nContent-Length", f"\r\n{auth}Content-Length"
-        )
-
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
-
-        self.recvLock.release()
-
-        return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
     def bye(self, request: SIPMessage) -> None:
         message = self.genBye(request)
@@ -1664,6 +1663,8 @@ class SIPClient:
             return False
 
     def __deregister(self) -> bool:
+        # TODO: Can this safely be changed to use context manager syntax or
+        # does the 5s recursive deregister() ruin that?
         self.recvLock.acquire()
         self.phone._status = PhoneStatus.DEREGISTERING
         firstRequest = self.genFirstRequest(deregister=True)
@@ -1763,6 +1764,8 @@ class SIPClient:
             self.registerThread.start()
 
     def __register(self) -> bool:
+        # TODO: Can this safely be changed to use context manager syntax or
+        # does the 5s recursive register() ruin that?
         self.recvLock.acquire()
         self.phone._status = PhoneStatus.REGISTERING
         firstRequest = self.genFirstRequest()
@@ -1872,16 +1875,13 @@ class SIPClient:
 
     def subscribe(self, lastresponse: SIPMessage) -> None:
         # TODO: check if needed and maybe implement fully
-        self.recvLock.acquire()
+        with self.recvLock:
+            subRequest = self.genSubscribe(lastresponse)
+            self.out.sendto(subRequest.encode("utf8"), (self.server, self.port))
 
-        subRequest = self.genSubscribe(lastresponse)
-        self.out.sendto(subRequest.encode("utf8"), (self.server, self.port))
+            response = SIPMessage(self.s.recv(8192))
 
-        response = SIPMessage(self.s.recv(8192))
-
-        debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
-
-        self.recvLock.release()
+            debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
 
     def trying_timeout_check(self, response: SIPMessage) -> SIPMessage:
         """

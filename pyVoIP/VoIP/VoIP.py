@@ -235,12 +235,11 @@ class VoIPCall:
             self.phone.release_ports(call=self)
 
     def dtmf_callback(self, code: str) -> None:
-        self.dtmfLock.acquire()
-        bufferloc = self.dtmf.tell()
-        self.dtmf.seek(0, 2)
-        self.dtmf.write(code)
-        self.dtmf.seek(bufferloc, 0)
-        self.dtmfLock.release()
+        with self.dtmfLock:
+            bufferloc = self.dtmf.tell()
+            self.dtmf.seek(0, 2)
+            self.dtmf.write(code)
+            self.dtmf.seek(bufferloc, 0)
 
     def getDTMF(self, length=1) -> str:
         warnings.warn(
@@ -252,10 +251,9 @@ class VoIPCall:
         return self.get_dtmf(length)
 
     def get_dtmf(self, length=1) -> str:
-        self.dtmfLock.acquire()
-        packet = self.dtmf.read(length)
-        self.dtmfLock.release()
-        return packet
+        with self.dtmfLock:
+            packet = self.dtmf.read(length)
+            return packet
 
     def genMs(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
         warnings.warn(
@@ -737,9 +735,8 @@ class VoIPPhone:
         return selection
 
     def release_ports(self, call: Optional[VoIPCall] = None) -> None:
-        self.portsLock.acquire()
-        self._cleanup_dead_calls()
-        try:
+        with self.portsLock:
+            self._cleanup_dead_calls()
             if isinstance(call, VoIPCall):
                 ports = list(call.assignedPorts.keys())
             else:
@@ -753,8 +750,6 @@ class VoIPPhone:
 
             for port in ports:
                 self.assignedPorts.remove(port)
-        finally:
-            self.portsLock.release()
 
     def _cleanup_dead_calls(self) -> None:
         to_delete = []
