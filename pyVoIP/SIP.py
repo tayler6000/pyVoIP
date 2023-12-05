@@ -874,11 +874,13 @@ class SIPClient:
                 )
             else:
                 debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
-        except Exception as e:
-            debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
+        except BlockingIOError:
             # Re-raise BlockingIOError so recv_loop() can release locks and
             # continue
-            if isinstance(e, BlockingIOError) or pyVoIP.DEBUG:
+            raise
+        except Exception as e:
+            debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
+            if pyVoIP.DEBUG:
                 raise
 
     def parseMessage(self, message: SIPMessage) -> None:
