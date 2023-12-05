@@ -846,42 +846,42 @@ class SIPClient:
         self.registerFailures = 0
         self.recvLock = Lock()
 
-    def recv(self) -> None:
+    def recv_loop(self) -> None:
         while self.NSD:
-            # TODO: Can this safely be changed to use context manager syntax
-            # or does the BlockingIOError handler ruin that?
-            self.recvLock.acquire()
-            self.s.setblocking(False)
             try:
-                raw = self.s.recv(8192)
-                if raw != b"\x00\x00\x00\x00":
-                    try:
-                        message = SIPMessage(raw)
-                        debug(message.summary())
-                        self.parseMessage(message)
-                    except Exception as ex:
-                        debug(f"Error on header parsing: {ex}")
+                with self.recvLock:
+                    self.s.setblocking(False)
+                    self.recv()
             except BlockingIOError:
                 self.s.setblocking(True)
-                self.recvLock.release()
                 time.sleep(0.01)
                 continue
-            except SIPParseError as e:
-                if "SIP Version" in str(e):
-                    request = self.genSIPVersionNotSupported(message)
-                    self.out.sendto(
-                        request.encode("utf8"), (self.server, self.port)
-                    )
-                else:
-                    debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
-            except Exception as e:
-                debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
-                if pyVoIP.DEBUG:
-                    self.s.setblocking(True)
-                    self.recvLock.release()
-                    raise
             self.s.setblocking(True)
-            self.recvLock.release()
+
+    def recv(self) -> None:
+        try:
+            raw = self.s.recv(8192)
+            if raw != b"\x00\x00\x00\x00":
+                try:
+                    message = SIPMessage(raw)
+                    debug(message.summary())
+                    self.parseMessage(message)
+                except Exception as ex:
+                    debug(f"Error on header parsing: {ex}")
+        except SIPParseError as e:
+            if "SIP Version" in str(e):
+                request = self.genSIPVersionNotSupported(message)
+                self.out.sendto(
+                    request.encode("utf8"), (self.server, self.port)
+                )
+            else:
+                debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
+        except Exception as e:
+            debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
+            # Re-raise BlockingIOError so recv_loop() can release locks and
+            # continue
+            if isinstance(e, BlockingIOError) or pyVoIP.DEBUG:
+                raise
 
     def parseMessage(self, message: SIPMessage) -> None:
         warnings.warn(
@@ -961,7 +961,7 @@ class SIPClient:
         self.s.bind((self.myIP, self.myPort))
         self.out = self.s
         self.register()
-        t = Timer(1, self.recv)
+        t = Timer(1, self.recv_loop)
         t.name = "SIP Recieve"
         t.start()
 
