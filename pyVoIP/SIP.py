@@ -40,6 +40,10 @@ class SIPParseError(Exception):
     pass
 
 
+class RetryRequiredError(Exception):
+    pass
+
+
 class Counter:
     def __init__(self, start: int = 1):
         self.x = start
@@ -1749,6 +1753,9 @@ class SIPClient:
                 self.stop()
                 self.fatalCallback()
                 return False
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.register()
             self.__start_register_timer(delay=0)
 
     def __start_register_timer(self, delay: Optional[int] = None):
@@ -1764,107 +1771,102 @@ class SIPClient:
             self.registerThread.start()
 
     def __register(self) -> bool:
-        # TODO: Can this safely be changed to use context manager syntax or
-        # does the 5s recursive register() ruin that?
-        self.recvLock.acquire()
-        self.phone._status = PhoneStatus.REGISTERING
-        firstRequest = self.genFirstRequest()
-        self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
-
-        self.out.setblocking(False)
-
-        ready = select.select([self.out], [], [], self.register_timeout)
-        if ready[0]:
-            resp = self.s.recv(8192)
-        else:
-            self.recvLock.release()
-            raise TimeoutError("Registering on SIP Server timed out")
-
-        response = SIPMessage(resp)
-        response = self.trying_timeout_check(response)
-        first_response = response
-
-        if response.status == SIPStatus(400):
-            # Bad Request
-            # TODO: implement
-            # TODO: check if broken connection can be brought back
-            # with new urn:uuid or reply with expire 0
-            self._handle_bad_request()
-
-        if response.status == SIPStatus(401):
-            # Unauthorized, likely due to being password protected.
-            regRequest = self.genRegister(response)
+        with self.recvLock:
+            self.phone._status = PhoneStatus.REGISTERING
+            firstRequest = self.genFirstRequest()
             self.out.sendto(
-                regRequest.encode("utf8"), (self.server, self.port)
+                firstRequest.encode("utf8"), (self.server, self.port)
             )
-            ready = select.select([self.s], [], [], self.register_timeout)
+
+            self.out.setblocking(False)
+
+            ready = select.select([self.out], [], [], self.register_timeout)
             if ready[0]:
                 resp = self.s.recv(8192)
-                response = SIPMessage(resp)
-                response = self.trying_timeout_check(response)
-                if response.status == SIPStatus(401):
-                    # At this point, it's reasonable to assume that
-                    # this is caused by invalid credentials.
-                    debug("=" * 50)
-                    debug("Unauthorized, SIP Message Log:\n")
-                    debug("SENT")
-                    debug(firstRequest)
-                    debug("\nRECEIVED")
-                    debug(first_response.summary())
-                    debug("\nSENT (DO NOT SHARE THIS PACKET)")
-                    debug(regRequest)
-                    debug("\nRECEIVED")
-                    debug(response.summary())
-                    debug("=" * 50)
-                    self.recvLock.release()
-                    raise InvalidAccountInfoError(
-                        "Invalid Username or "
-                        + "Password for SIP server "
-                        + f"{self.server}:"
-                        + f"{self.myPort}"
-                    )
-                elif response.status == SIPStatus(400):
-                    # Bad Request
-                    # TODO: implement
-                    # TODO: check if broken connection can be brought back
-                    # with new urn:uuid or reply with expire 0
-                    self._handle_bad_request()
             else:
-                self.recvLock.release()
                 raise TimeoutError("Registering on SIP Server timed out")
 
-        if response.status == SIPStatus(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
+            response = SIPMessage(resp)
+            response = self.trying_timeout_check(response)
+            first_response = response
 
-        # TODO: This must be done more reliable
-        if response.status not in [
-            SIPStatus(400),
-            SIPStatus(401),
-            SIPStatus(407),
-        ]:
-            # Unauthorized
-            if response.status == SIPStatus(500):
-                self.recvLock.release()
-                time.sleep(5)
-                return self.register()
+            if response.status == SIPStatus(400):
+                # Bad Request
+                # TODO: implement
+                # TODO: check if broken connection can be brought back
+                # with new urn:uuid or reply with expire 0
+                self._handle_bad_request()
+
+            if response.status == SIPStatus(401):
+                # Unauthorized, likely due to being password protected.
+                regRequest = self.genRegister(response)
+                self.out.sendto(
+                    regRequest.encode("utf8"), (self.server, self.port)
+                )
+                ready = select.select([self.s], [], [], self.register_timeout)
+                if ready[0]:
+                    resp = self.s.recv(8192)
+                    response = SIPMessage(resp)
+                    response = self.trying_timeout_check(response)
+                    if response.status == SIPStatus(401):
+                        # At this point, it's reasonable to assume that
+                        # this is caused by invalid credentials.
+                        debug("=" * 50)
+                        debug("Unauthorized, SIP Message Log:\n")
+                        debug("SENT")
+                        debug(firstRequest)
+                        debug("\nRECEIVED")
+                        debug(first_response.summary())
+                        debug("\nSENT (DO NOT SHARE THIS PACKET)")
+                        debug(regRequest)
+                        debug("\nRECEIVED")
+                        debug(response.summary())
+                        debug("=" * 50)
+                        raise InvalidAccountInfoError(
+                            "Invalid Username or "
+                            + "Password for SIP server "
+                            + f"{self.server}:"
+                            + f"{self.myPort}"
+                        )
+                    elif response.status == SIPStatus(400):
+                        # Bad Request
+                        # TODO: implement
+                        # TODO: check if broken connection can be brought back
+                        # with new urn:uuid or reply with expire 0
+                        self._handle_bad_request()
+                else:
+                    raise TimeoutError("Registering on SIP Server timed out")
+
+            if response.status == SIPStatus(407):
+                # Proxy Authentication Required
+                # TODO: implement
+                debug("Proxy auth required")
+
+            # TODO: This must be done more reliable
+            if response.status not in [
+                SIPStatus(400),
+                SIPStatus(401),
+                SIPStatus(407),
+            ]:
+                # Unauthorized
+                if response.status == SIPStatus(500):
+                    # We raise so the calling function can sleep and try again
+                    raise RetryRequiredError("Response SIP status of 500")
+                else:
+                    # TODO: determine if needed here
+                    self.parseMessage(response)
+
+            debug(response.summary())
+            debug(response.raw)
+
+            if response.status == SIPStatus.OK:
+                return True
             else:
-                # TODO: determine if needed here
-                self.parseMessage(response)
-
-        debug(response.summary())
-        debug(response.raw)
-
-        self.recvLock.release()
-        if response.status == SIPStatus.OK:
-            return True
-        else:
-            raise InvalidAccountInfoError(
-                "Invalid Username or Password for "
-                + f"SIP server {self.server}:"
-                + f"{self.myPort}"
-            )
+                raise InvalidAccountInfoError(
+                    "Invalid Username or Password for "
+                    + f"SIP server {self.server}:"
+                    + f"{self.myPort}"
+                )
 
     def _handle_bad_request(self) -> None:
         # Bad Request
@@ -1877,11 +1879,15 @@ class SIPClient:
         # TODO: check if needed and maybe implement fully
         with self.recvLock:
             subRequest = self.genSubscribe(lastresponse)
-            self.out.sendto(subRequest.encode("utf8"), (self.server, self.port))
+            self.out.sendto(
+                subRequest.encode("utf8"), (self.server, self.port)
+            )
 
             response = SIPMessage(self.s.recv(8192))
 
-            debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
+            debug(
+                f'Got response to subscribe: {str(response.heading, "utf8")}'
+            )
 
     def trying_timeout_check(self, response: SIPMessage) -> SIPMessage:
         """
