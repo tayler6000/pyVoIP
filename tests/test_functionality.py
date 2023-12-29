@@ -1,6 +1,6 @@
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.VoIP.call import CallState
-from pyVoIP.VoIP.phone import PhoneStatus, VoIPPhone
+from pyVoIP.VoIP.phone import PhoneStatus, VoIPPhone, VoIPPhoneParameter
 from pyVoIP.sock.transport import TransportMode
 import pytest
 import pyVoIP
@@ -19,14 +19,15 @@ pyVoIP.set_tls_security(ssl.CERT_NONE)
 def phone():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5060,
+        user="pass",
+        credentials_manager=cm,
         bind_ip="127.0.0.1",
-        bind_port=5059,
+        bind_port=5059
     )
+    phone = VoIPPhone(voip_phone_parameter)
     phone.start()
     yield phone
     phone.stop()
@@ -34,14 +35,15 @@ def phone():
 
 @pytest.fixture
 def nopass_phone():
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5060,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
-        bind_port=5059,
+        bind_port=5059
     )
+    phone = VoIPPhone(voip_phone_parameter)
     phone.start()
     yield phone
     phone.stop()
@@ -51,14 +53,15 @@ def nopass_phone():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_nopass():
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5060,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
-        bind_port=5059,
+        bind_port=5059
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -76,14 +79,15 @@ def test_nopass():
 def test_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5060,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5060,
+        user="pass",
+        credentials_manager=cm,
         bind_ip="127.0.0.1",
-        bind_port=5059,
+        bind_port=5059
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -99,15 +103,16 @@ def test_pass():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tcp_nopass():
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5061,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5060,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
         bind_port=5059,
-        transport_mode=TransportMode.TCP,
+        transport_mode = TransportMode.TCP
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -125,15 +130,16 @@ def test_tcp_nopass():
 def test_tcp_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5061,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5061,
+        user="pass",
+        credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
         bind_port=5059,
-        transport_mode=TransportMode.TCP,
+        transport_mode = TransportMode.TCP
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -149,18 +155,19 @@ def test_tcp_pass():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tls_nopass():
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5062,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5062,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
         cert_file="certs/cert.crt",
         key_file="certs/key.txt",
-        key_password=None,
+        key_password=None
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -178,18 +185,19 @@ def test_tls_nopass():
 def test_tls_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        "127.0.0.1",
-        5062,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server="127.0.0.1",
+        port=5062,
+        user="nopass",
+        credentials_manager=cm,
         bind_ip="127.0.0.1",
         bind_port=5059,
         transport_mode=TransportMode.TLS,
         cert_file="certs/cert.crt",
         key_file="certs/key.txt",
-        key_password=None,
+        key_password=None
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
