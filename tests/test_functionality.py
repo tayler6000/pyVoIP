@@ -105,7 +105,7 @@ def test_pass():
 def test_tcp_nopass():
     voip_phone_parameter = VoIPPhoneParameter(
         server="127.0.0.1",
-        port=5060,
+        port=5061,
         user="nopass",
         credentials_manager=CredentialsManager(),
         bind_ip="127.0.0.1",
@@ -134,7 +134,7 @@ def test_tcp_pass():
         server="127.0.0.1",
         port=5061,
         user="pass",
-        credentials_manager=CredentialsManager(),
+        credentials_manager=cm,
         bind_ip="127.0.0.1",
         bind_port=5059,
         transport_mode = TransportMode.TCP
@@ -188,7 +188,7 @@ def test_tls_pass():
     voip_phone_parameter = VoIPPhoneParameter(
         server="127.0.0.1",
         port=5062,
-        user="nopass",
+        user="pass",
         credentials_manager=cm,
         bind_ip="127.0.0.1",
         bind_port=5059,
