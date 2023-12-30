@@ -133,9 +133,7 @@ class VoIPConnection:
                 conn.close()
                 return row["msg"].encode("utf8")
             try:
-                self.sock.buffer.commit()
                 conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
-                self.sock.buffer.commit()
             except sqlite3.OperationalError:
                 pass
             conn.close()
@@ -184,7 +182,9 @@ class VoIPSocket(threading.Thread):
             self.s = self.server_context.wrap_socket(self.s, server_side=True)
 
         self.buffer = sqlite3.connect(
-            pyVoIP.SIP_STATE_DB_LOCATION, check_same_thread=False
+            pyVoIP.SIP_STATE_DB_LOCATION,
+            isolation_level=None,
+            check_same_thread=False,
         )
         """
         RFC 3261 Section 12, Paragraph 2 states:
@@ -225,10 +225,6 @@ class VoIPSocket(threading.Thread):
                 PRIMARY KEY("call_id", "local_tag", "remote_tag")
             );"""
         )
-        try:
-            self.buffer.commit()
-        except sqlite3.OperationalError:
-            pass
         conn.close()
         self.conns_lock = threading.Lock()
         self.conns: List[VoIPConnection] = []
@@ -300,7 +296,6 @@ class VoIPSocket(threading.Thread):
                     conn_id,
                 ),
             )
-            self.buffer.commit()
         except sqlite3.IntegrityError as e:
             e.add_note(
                 "Error is from registering connection for message: "
@@ -348,7 +343,6 @@ class VoIPSocket(threading.Thread):
             conn.execute(
                 'DELETE FROM "listening" WHERE "connection" = ?', (conn_id,)
             )
-            self.buffer.commit()
         except sqlite3.OperationalError:
             pass
         finally:
@@ -446,10 +440,6 @@ class VoIPSocket(threading.Thread):
             + "VALUES (?, ?, ?, ?)",
             (call_id, local_tag, remote_tag, raw_message),
         )
-        try:
-            self.buffer.commit()
-        except sqlite3.OperationalError:
-            pass
         conn.close()
         if conn_id:
             self.sip.handle_new_connection(self.conns[conn_id])
