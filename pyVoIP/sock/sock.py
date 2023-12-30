@@ -89,6 +89,7 @@ class VoIPConnection:
             return self._udp_recv(nbytes, timeout, peak)
 
     def _tcp_tls_recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+        timeout = time.monotonic() + timeout if timeout else math.inf
         # TODO: Timeout
         msg = None
         while not msg and not self.sock.SD:
