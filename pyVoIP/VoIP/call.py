@@ -276,8 +276,96 @@ class VoIPCall:
         message = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
-        self.sip.sendto(message, self.request.headers["Via"][0]["address"])
+        self.conn.send(message)
+        message = SIPMessage(self.conn.recv())
+        if message.method != "ACK":
+            debug(
+                f"Received Message to OK other than ACK: {message.method}:\n\n"
+                + f"{message.summary()}",
+                f"Received Message to OK other than ACK: {message.method}",
+            )
         self.state = CallState.ANSWERED
+
+    def transfer(
+        self, user: Optional[str] = None, uri: Optional[str] = None, blind=True
+    ) -> bool:
+        """
+        Send REFER request to transfer call.  If blind is true (default), the
+        call will immediately end after received a 200 or 202 response.
+        Otherwise, it will wait for the Transferee to report a successful
+        transfer. Or, if the transfer is unsuccessful, the call will continue.
+        This function returns true if the transfer is blind or successful, and
+        returns false if it is unsuccessful.
+
+        If using a URI to transfer, you must include a complete URI to include
+        <> brackets as necessary.
+        """
+        request = self.sip.gen_refer(self.request, user, uri, blind)
+        """
+        Per RFC 5589 Section 5, REFER messages SHOULD be sent over a new dialog
+        """
+        new_dialog = True
+        conn = self.sip.send(request)
+        conn.send(request)
+        response = SIPMessage(conn.recv())
+
+        if response.status not in [
+            SIPStatus.OK,
+            SIPStatus.TRYING,
+            SIPStatus.ACCEPTED,
+            SIPStatus.BAD_EXTENSION,
+        ]:
+            # If we've not received any of these responses, the client likely
+            # does not accept out of dialog REFER requests.
+            conn.close()
+            new_dialog = False
+            conn = self.conn
+            request = self.sip.gen_refer(
+                self.request, user, uri, blind, new_dialog=False
+            )
+            conn.send(request)
+            response = SIPMessage(conn.recv())
+
+        norefersub = True
+        if blind and response.status == SIPStatus.BAD_EXTENSION:
+            # If the client does not support norefersub, resend without it.
+            norefersub = False
+            if new_dialog:
+                conn.close()
+            request = self.sip.gen_refer(self.request, user, uri, blind=False)
+            if new_dialog:
+                conn = self.sip.send(request)
+            else:
+                conn.send(request)
+            response = SIPMessage(conn.recv())
+
+        if response.status not in [SIPStatus.OK, SIPStatus.ACCEPTED]:
+            return False
+        if blind:
+            if norefersub:
+                if new_dialog:
+                    conn.close()
+                self.hangup()
+                return True
+        response = SIPMessage(conn.recv())
+        while response.method == "NOTIFY" and response.body.get(
+            "content", b""
+        ) in [
+            b"",
+            b"SIP/2.0 100 Trying\r\n",
+            b"SIP/2.0 181 Ringing\r\n",
+        ]:
+            reply = self.sip.gen_ok(response)
+            conn.send(reply)
+            response = SIPMessage(conn.recv())
+        if response.body.get("content", b"") == b"SIP/2.0 200 OK\r\n":
+            reply = self.sip.gen_ok(response)
+            conn.send(reply)
+            if new_dialog:
+                conn.close()
+            self.hangup()
+            return True
+        return False
 
     def rtp_answered(self, request: SIP.SIPMessage) -> None:
         for i in request.body["m"]:
