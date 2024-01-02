@@ -43,7 +43,7 @@ class VoIPPhoneParameter:
     credentials_manager: Optional[CredentialsManager]
     bind_ip: Optional[str] = "0.0.0.0"
     bind_port: Optional[int] = 5060
-    bind_network: Optional[str]="0.0.0.0/0",
+    bind_network: Optional[str] = "0.0.0.0/0",
     hostname: Optional[str] = None,
     remote_hostname: Optional[str] = None,
     transport_mode: Optional[TransportMode] = TransportMode.UDP
@@ -74,21 +74,11 @@ class VoIPPhone:
         self._status = PhoneStatus.INACTIVE
         self.NSD = False
 
-        self.callClass = callClass is not None and callClass or VoIPCall
-        self.sipClass = sipClass is not None and sipClass or SIP.SIPClient
-
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
         self.session_ids: List[int] = []
 
-        self.server = server
-        self.port = port
-        self.bind_ip = bind_ip
-        self.user = user
-        self.credentials_manager = credentials_manager
-        self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
-        self.transport_mode = transport_mode
 
         # "recvonly", "sendrecv", "sendonly", "inactive"
         self.sendmode = "sendrecv"
