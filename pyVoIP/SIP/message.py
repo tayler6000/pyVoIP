@@ -1,7 +1,7 @@
 from enum import Enum, IntEnum
 from pyVoIP import regex
 from pyVoIP.SIP.error import SIPParseError
-from pyVoIP.types import TFC_HEADER
+from pyVoIP.types import URI_HEADER
 from typing import Any, Callable, Dict, List, Optional, Union
 import pyVoIP
 
@@ -291,7 +291,6 @@ class SIPMessage:
         self.SIPCompatibleMethods = pyVoIP.SIPCompatibleMethods
         self.heading: List[str] = []
         self.type: Optional[SIPMessageType] = None
-        self.to: Optional[TFC_HEADER] = None
         self.status = SIPStatus(491)
         self.headers: Dict[str, Any] = {"Via": []}
         self.body: Dict[str, Any] = {}
@@ -317,8 +316,19 @@ class SIPMessage:
             self.parse(data)
         except Exception as e:
             if type(e) is not SIPParseError:
-                raise SIPParseError(e)
+                raise SIPParseError(e) from e
             raise
+
+    @property
+    def to(self) -> Optional[URI_HEADER]:
+        """
+        The to property specifies the URI in the first line of a SIP request.
+        """
+        return self._to
+
+    @to.setter
+    def to(self, value: str) -> None:
+        self._to = value
 
     def summary(self) -> str:
         data = ""
@@ -362,7 +372,7 @@ class SIPMessage:
             )
         """
 
-    def __get_tfc_header(self, data: str) -> TFC_HEADER:
+    def __get_uri_header(self, data: str) -> URI_HEADER:
         info = data.split(";tag=")
         tag = ""
         if len(info) >= 2:
@@ -448,14 +458,14 @@ class SIPMessage:
                     else:
                         _via[x] = None
                 self.headers["Via"].append(_via)
-        elif header in ["To", "From", "Contact"]:
-            self.headers[header] = self.__get_tfc_header(data)
+        elif header in ["To", "From", "Contact", "Refer-To"]:
+            self.headers[header] = self.__get_uri_header(data)
         elif header == "CSeq":
             self.headers[header] = {
                 "check": int(data.split(" ")[0]),
                 "method": data.split(" ")[1],
             }
-        elif header == "Allow" or header == "Supported":
+        elif header in ["Allow", "Supported", "Require"]:
             self.headers[header] = data.split(", ")
         elif header == "Call-ID":
             self.headers[header] = data
@@ -483,6 +493,26 @@ class SIPMessage:
                 header_data[var] = data.strip('"')
             self.headers[header] = header_data
             self.authentication = header_data
+        elif header == "Target-Dialog":
+            # Target-Dialog (tdialog) is specified in RFC 4538
+            params = data.split(";")
+            header_data: Dict[str, Any] = {
+                "callid": params.pop(0)
+            }  # key is callid to be consitenent with RFC 4538 Section 7
+            for x in params:
+                y = x.split("=")
+                header_data[y[0]] = y[1]
+            self.headers[header] = header_data
+        elif header == "Refer-Sub":
+            # Refer-Sub (norefersub) is specified in RFC 4488
+            params = data.split(";")
+            header_data: Dict[str, Any] = {
+                "value": True if params.pop(0) == "true" else False
+            }  # BNF states extens are possible
+            for x in params:
+                y = x.split("=")
+                header_data[y[0]] = y[1]
+            self.headers[header] = header_data
         else:
             try:
                 self.headers[header] = int(data)
@@ -790,7 +820,7 @@ class SIPMessage:
             raise SIPParseError(f"SIP Version {self.version} not compatible.")
 
         self.method = self.heading[0]
-        self.to = self.__get_tfc_header(self.heading[1])
+        self.to = self.__get_uri_header(self.heading[1])
 
         self.parse_raw_header(headers_raw, self.parse_header)
 

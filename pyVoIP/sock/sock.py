@@ -77,7 +77,7 @@ class VoIPConnection:
     def peak(self) -> bytes:
         return self.recv(8192, timeout=60, peak=True)
 
-    def recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+    def recv(self, nbytes: int = 8192, timeout=0, peak=False) -> bytes:
         if self._peak_buffer:
             data = self._peak_buffer
             if not peak:

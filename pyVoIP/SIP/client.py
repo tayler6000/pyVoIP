@@ -7,7 +7,7 @@ from pyVoIP.SIP.error import (
     InvalidAccountInfoError,
 )
 from pyVoIP.helpers import Counter
-from pyVoIP.networking.nat import NAT
+from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.SIP.message import (
     SIPMessage,
     SIPStatus,
@@ -83,6 +83,7 @@ class SIPClient:
         self.subscribeCounter = Counter()
         self.byeCounter = Counter()
         self.messageCounter = Counter()
+        self.referCounter = Counter()
         self.callID = Counter()
         self.sessID = Counter()
 
@@ -232,7 +233,7 @@ class SIPClient:
             if self.s:
                 self.s.close()
 
-    def sendto(self, request: str, address=None):
+    def sendto(self, request: str, address=None) -> "VoIPConnection":
         if address is None:
             address = (self.server, self.port)
         return self.s.send(request.encode("utf8"))
@@ -299,16 +300,15 @@ class SIPClient:
 
         assert method in ["sip", "sips"], "method must be sip or sips"
         assert (
-            type(user) is str and len(user) > 0
-        ), "User must be a non-empty string"
-        assert (
             type(host) is str and len(host) > 0
-        ), "User must be a non-empty string"
+        ), "Host must be a non-empty string"
 
         password = f":{password}" if password else ""
         port_str = f":{port}" if port != 5060 else ""
         params = params if params else ""
-        return f"{method}:{user}{password}@{host}{port_str}{params}"
+        if type(user) is str and len(user) > 0:
+            return f"{method}:{user}{password}@{host}{port_str}{params}"
+        return f"{method}:{host}{port_str}{params}"
 
     def __gen_via(self, to: str, branch: str) -> str:
         # SIP/2.0/ should still be the prefix even if using TLS per RFC 3261
@@ -832,6 +832,158 @@ class SIPClient:
         invRequest += body
 
         return invRequest
+
+    def gen_refer(
+        self,
+        request: SIPMessage,
+        user: Optional[str] = None,
+        uri: Optional[str] = None,
+        blind=True,
+        new_dialog=True,
+    ) -> str:
+        if new_dialog:
+            return self.__gen_refer_new_dialog(request, user, uri, blind)
+        return self.__gen_refer_same_dialog(request, user, uri, blind)
+
+    def __gen_refer_new_dialog(
+        self,
+        request: SIPMessage,
+        user: Optional[str] = None,
+        uri: Optional[str] = None,
+        blind=True,
+    ) -> str:
+        if user is None and uri is None:
+            raise RuntimeError("Must specify a user or a URI to transfer to")
+        call_id = self.gen_call_id()
+        self.tagLibrary[call_id] = self.gen_tag()
+        tag = self.tagLibrary[call_id]
+
+        c = request.headers["Contact"]["uri"]
+        refer = f"REFER {c} SIP/2.0\r\n"
+        refer += self._gen_response_via_header(request)
+        refer += "Max-Forwards: 70\r\n"
+
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        refer += self.__gen_from_to(
+            "From",
+            self.user,
+            self.nat.get_host(self.bind_ip),
+            method,
+            header_parms=f";tag={tag}",
+        )
+
+        # Determine if To or From is local to decide who the refer is to
+        to_local = (
+            self.nat.check_host(request.headers["To"]["host"])
+            == AddressType.LOCAL
+        )
+
+        if to_local:
+            to_user = request.headers["From"]["user"]
+            to_host = request.headers["From"]["host"]
+            method = request.headers["From"]["uri-type"]
+            to_display_name = request.headers["From"]["display-name"]
+            to_password = request.headers["From"]["password"]
+            to_port = request.headers["From"]["port"]
+            remote_tag = request.headers["From"]["tag"]
+        else:
+            to_user = request.headers["To"]["user"]
+            to_host = request.headers["To"]["host"]
+            method = request.headers["To"]["uri-type"]
+            to_display_name = request.headers["To"]["display-name"]
+            to_password = request.headers["To"]["password"]
+            to_port = request.headers["To"]["port"]
+            remote_tag = request.headers["To"]["tag"]
+
+        refer += self.__gen_from_to(
+            "To",
+            to_user,
+            to_host,
+            method,
+            to_display_name,
+            to_password,
+            to_port,
+        )
+
+        refer += f"Call-ID: {call_id}\r\n"
+        refer += f"CSeq: {self.referCounter.next()} REFER\r\n"
+        refer += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+        if user:
+            method = (
+                "sips" if self.transport_mode is TransportMode.TLS else "sip"
+            )
+            uri = self.__gen_uri(
+                method,
+                user,
+                self.nat.get_host(self.server),
+                port=self.bind_port,
+            )
+        refer += f"Refer-To: {uri}\r\n"
+        sess_call_id = request.headers["Call-ID"]
+        local_tag = self.tagLibrary[sess_call_id]
+        refer += (
+            f"Target-Dialog: {sess_call_id};local-tag={local_tag}"
+            + f";remote-tag={remote_tag}\r\n"
+        )
+        refer += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            port=self.bind_port,
+        )
+        if blind:
+            refer += "Refer-Sub: false\r\n"
+        refer += "Supported: norefersub\r\n"
+        refer += self.__gen_user_agent()
+        refer += "Content-Length: 0\r\n\r\n"
+        return refer
+
+    def __gen_refer_same_dialog(
+        self,
+        request: SIPMessage,
+        user: Optional[str] = None,
+        uri: Optional[str] = None,
+        blind=True,
+    ) -> str:
+        tag = self.tagLibrary[request.headers["Call-ID"]]
+        c = request.headers["Contact"]["uri"]
+        refer = f"REFER {c} SIP/2.0\r\n"
+        refer += self._gen_response_via_header(request)
+        refer += "Max-Forwards: 70\r\n"
+        _from = request.headers["From"]
+        to = request.headers["To"]
+        if request.headers["From"]["tag"] == tag:
+            refer += self.__gen_from_to_via_request(request, "From", tag)
+            refer += f"To: {to['raw']}\r\n"
+        else:
+            refer += f"To: {_from['raw']}\r\n"
+            refer += self.__gen_from_to_via_request(
+                request, "To", tag, dsthdr="From"
+            )
+        refer += f"Call-ID: {request.headers['Call-ID']}\r\n"
+        refer += f"CSeq: {self.referCounter.next()} REFER\r\n"
+        refer += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        if user:
+            uri = self.__gen_uri(
+                method,
+                user,
+                self.nat.get_host(self.server),
+                port=self.bind_port,
+            )
+        refer += f"Refer-To: {uri}\r\n"
+        refer += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            port=self.bind_port,
+        )
+        if blind:
+            refer += "Refer-Sub: false\r\n"
+        refer += "Supported: norefersub\r\n"
+        refer += self.__gen_user_agent()
+        refer += "Content-Length: 0\r\n\r\n"
+        return refer
 
     def _gen_bye_cancel(self, request: SIPMessage, cmd: str) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
