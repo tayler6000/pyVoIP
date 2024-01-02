@@ -1,6 +1,7 @@
 from enum import Enum
 from pyVoIP import SIP, RTP
 from pyVoIP.credentials import CredentialsManager
+from pyVoIP.sock.sock import VoIPConnection
 from pyVoIP.sock.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
 from pyVoIP.VoIP.call import CallState, VoIPCall
@@ -42,6 +43,9 @@ class VoIPPhoneParameter:
     credentials_manager: Optional[CredentialsManager]
     bind_ip: Optional[str] = "0.0.0.0"
     bind_port: Optional[int] = 5060
+    bind_network: Optional[str]="0.0.0.0/0",
+    hostname: Optional[str] = None,
+    remote_hostname: Optional[str] = None,
     transport_mode: Optional[TransportMode] = TransportMode.UDP
     cert_file: Optional[str] = None
     key_file: Optional[str] = None
@@ -70,9 +74,21 @@ class VoIPPhone:
         self._status = PhoneStatus.INACTIVE
         self.NSD = False
 
+        self.callClass = callClass is not None and callClass or VoIPCall
+        self.sipClass = sipClass is not None and sipClass or SIP.SIPClient
+
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
         self.session_ids: List[int] = []
+
+        self.server = server
+        self.port = port
+        self.bind_ip = bind_ip
+        self.user = user
+        self.credentials_manager = credentials_manager
+        self.call_callback = call_callback
+        self._status = PhoneStatus.INACTIVE
+        self.transport_mode = transport_mode
 
         # "recvonly", "sendrecv", "sendonly", "inactive"
         self.sendmode = "sendrecv"
@@ -88,17 +104,22 @@ class VoIPPhone:
             self.voip_phone_parameter.user,
             self.voip_phone_parameter.credentials_manager,
             bind_ip=self.voip_phone_parameter.bind_ip,
+            bind_network=self.voip_phone_parameter.bind_network,
+            hostname=self.voip_phone_parameter.hostname,
+            remote_hostname=self.voip_phone_parameter.remote_hostname,
             bind_port=self.voip_phone_parameter.bind_port,
             call_callback=self.voip_phone_parameter.callback,
             transport_mode=self.voip_phone_parameter.transport_mode,
         )
 
-    def callback(self, request: SIP.SIPMessage) -> Optional[str]:
+    def callback(
+        self, conn: VoIPConnection, request: SIP.SIPMessage
+    ) -> Optional[str]:
         # debug("Callback: "+request.summary())
         if request.type == pyVoIP.SIP.SIPMessageType.REQUEST:
             # debug("This is a message")
             if request.method == "INVITE":
-                self._callback_MSG_Invite(request)
+                self._callback_MSG_Invite(conn, request)
             elif request.method == "BYE":
                 self._callback_MSG_Bye(request)
             elif request.method == "OPTIONS":
@@ -123,23 +144,13 @@ class VoIPPhone:
     def get_status(self) -> PhoneStatus:
         return self._status
 
-    def _callback_MSG_Invite(self, request: SIP.SIPMessage) -> None:
+    def _callback_MSG_Invite(
+        self, conn: VoIPConnection, request: SIP.SIPMessage
+    ) -> None:
         call_id = request.headers["Call-ID"]
-        if call_id in self.calls:
-            debug("Re-negotiation detected!")
-            # TODO: this seems "dangerous" if for some reason sip server
-            # handles 2 and more bindings it will cause duplicate RTP-Clients
-            # to spawn.
-
-            # CallState.Ringing seems important here to prevent multiple
-            # answering and RTP-Client spawning. Find out when renegotiation
-            # is relevant.
-            if self.calls[call_id].state != CallState.RINGING:
-                self.calls[call_id].renegotiate(request)
-            return  # Raise Error
         if self.callClass is None:
             message = self.sip.gen_busy(request)
-            self.sip.sendto(message, request.headers["Via"][0]["address"])
+            conn.send(message)
         else:
             debug("New call!")
             sess_id = None
@@ -149,8 +160,8 @@ class VoIPPhone:
                     self.session_ids.append(proposed)
                     sess_id = proposed
             message = self.sip.gen_ringing(request)
-            self.sip.sendto(message, request.headers["Via"][0]["address"])
-            call = self._create_Call(request, sess_id)
+            conn.send(message)
+            call = self._create_call(conn, request, sess_id)
             try:
                 t = Timer(1, call.ringing, [request])
                 t.name = f"Phone Call: {call_id}"
@@ -159,9 +170,8 @@ class VoIPPhone:
                 self.threadLookup[t] = call_id
             except Exception:
                 message = self.sip.gen_busy(request)
-                self.sip.sendto(
+                conn.send(
                     message,
-                    request.headers["Via"][0]["address"],
                 )
                 raise
 
@@ -267,7 +277,9 @@ class VoIPPhone:
         ack = self.sip.gen_ack(request)
         self.sip.sendto(ack)
 
-    def _create_Call(self, request: SIP.SIPMessage, sess_id: int) -> VoIPCall:
+    def _create_call(
+        self, conn: VoIPConnection, request: SIP.SIPMessage, sess_id: int
+    ) -> VoIPCall:
         """
         Create VoIP call object. Should be separated to enable better
         subclassing.
@@ -279,6 +291,7 @@ class VoIPPhone:
             request,
             sess_id,
             self.voip_phone_parameter.bind_ip,
+            conn=conn,
             sendmode=self.recvmode,
         )
         return self.calls[call_id]
@@ -303,6 +316,7 @@ class VoIPPhone:
             except InvalidStateError:
                 pass
         self.sip.stop()
+        self.NSD = False
         self._status = PhoneStatus.INACTIVE
 
     def call(
@@ -328,7 +342,7 @@ class VoIPPhone:
                 medias[port][dynamic_int] = pt
                 dynamic_int += 1
         debug(f"Making call with {medias=}")
-        request, call_id, sess_id = self.sip.invite(
+        request, call_id, sess_id, conn = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
         self.calls[call_id] = self.callClass(
@@ -339,6 +353,7 @@ class VoIPPhone:
             self.voip_phone_parameter.bind_ip,
             ms=medias,
             sendmode=self.sendmode,
+            conn=conn,
         )
 
         return self.calls[call_id]

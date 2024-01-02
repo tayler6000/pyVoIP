@@ -313,7 +313,12 @@ class SIPMessage:
             "v": "Via",
         }
 
-        self.parse(data)
+        try:
+            self.parse(data)
+        except Exception as e:
+            if type(e) is not SIPParseError:
+                raise SIPParseError(e)
+            raise
 
     def summary(self) -> str:
         data = ""
@@ -368,7 +373,7 @@ class SIPMessage:
         if direct:
             reg = regex.TO_FROM_DIRECT_MATCH
         match = reg.match(data)
-        if type(match) != regex.Match:
+        if match is None:
             raise SIPParseError(
                 "Regex failed to match To/From.\n\n"
                 + "Please open a GitHub Issue at "

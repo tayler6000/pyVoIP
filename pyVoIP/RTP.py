@@ -349,8 +349,12 @@ class RTPClient:
 
     def stop(self) -> None:
         self.NSD = False
-        self.sin.close()
-        self.sout.close()
+        if hasattr(self, "sin"):
+            if self.sin:
+                self.sin.close()
+        if hasattr(self, "sout"):
+            if self.sout:
+                self.sout.close()
 
     def read(self, length: int = 160, blocking: bool = True) -> bytes:
         if not blocking:
