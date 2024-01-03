@@ -1527,6 +1527,7 @@ class SIPClient:
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         cseq = int(request.headers["CSeq"]["check"]) + 1
         byeRequest += f"CSeq: {cseq} BYE\r\n"
+        byeRequest += "Max-Forwards: 70\r\n"
         byeRequest += (
             "Contact: "
             + f"<sip:{self.username}@{self.myIP}:{self.myPort}>\r\n"
