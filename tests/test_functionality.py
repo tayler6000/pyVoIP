@@ -1,6 +1,6 @@
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.VoIP.call import CallState
-from pyVoIP.VoIP.phone import PhoneStatus, VoIPPhone
+from pyVoIP.VoIP.phone import PhoneStatus, VoIPPhone, VoIPPhoneParameter
 from pyVoIP.sock.transport import TransportMode
 import json
 import os
@@ -43,15 +43,16 @@ CALL_TIMEOUT = 2  # 2 seconds to answer.
 def phone():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        SERVER_HOST,
-        UDP_PORT,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=UDP_PORT,
+        user="pass",
+        credentials_manager=cm,
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     phone.start()
     yield phone
     phone.stop()
@@ -59,15 +60,16 @@ def phone():
 
 @pytest.fixture
 def nopass_phone():
-    phone = VoIPPhone(
-        SERVER_HOST,
-        UDP_PORT,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=UDP_PORT,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     phone.start()
     yield phone
     phone.stop()
@@ -77,15 +79,16 @@ def nopass_phone():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_nopass():
-    phone = VoIPPhone(
-        SERVER_HOST,
-        UDP_PORT,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=UDP_PORT,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -103,15 +106,16 @@ def test_nopass():
 def test_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        SERVER_HOST,
-        UDP_PORT,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=UDP_PORT,
+        user="pass",
+        credentials_manager=cm,
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -127,16 +131,17 @@ def test_pass():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tcp_nopass():
-    phone = VoIPPhone(
-        SERVER_HOST,
-        TCP_PORT,
-        "nopass",
-        CredentialsManager(),
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=TCP_PORT,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
         transport_mode=TransportMode.TCP,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -154,16 +159,17 @@ def test_tcp_nopass():
 def test_tcp_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        SERVER_HOST,
-        TCP_PORT,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=TCP_PORT,
+        user="pass",
+        credentials_manager=cm,
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
         transport_mode=TransportMode.TCP,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -179,12 +185,11 @@ def test_tcp_pass():
 @pytest.mark.registration
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tls_nopass():
-    phone = VoIPPhone(
-        SERVER_HOST,
-        TLS_PORT,
-        "nopass",
-        CredentialsManager(),
-        hostname="host.docker.internal",
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=TLS_PORT,
+        user="nopass",
+        credentials_manager=CredentialsManager(),
         bind_ip=BIND_IP,
         bind_port=5059,
         transport_mode=TransportMode.TLS,
@@ -192,6 +197,7 @@ def test_tls_nopass():
         key_file="certs/key.txt",
         key_password=None,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
@@ -209,11 +215,11 @@ def test_tls_nopass():
 def test_tls_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
-    phone = VoIPPhone(
-        SERVER_HOST,
-        TLS_PORT,
-        "pass",
-        cm,
+    voip_phone_parameter = VoIPPhoneParameter(
+        server=SERVER_HOST,
+        port=TLS_PORT,
+        user="pass",
+        credentials_manager=cm,
         hostname="host.docker.internal",
         bind_ip=BIND_IP,
         bind_port=5059,
@@ -222,6 +228,7 @@ def test_tls_pass():
         key_file="certs/key.txt",
         key_password=None,
     )
+    phone = VoIPPhone(voip_phone_parameter)
     assert phone.get_status() == PhoneStatus.INACTIVE
     phone.start()
     while phone.get_status() == PhoneStatus.REGISTERING:
