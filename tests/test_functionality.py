@@ -44,8 +44,8 @@ def phone():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5060,
+        server=SERVER_HOST,
+        port=UDP_PORT,
         user="pass",
         credentials_manager=cm,
         hostname="host.docker.internal",
@@ -61,8 +61,8 @@ def phone():
 @pytest.fixture
 def nopass_phone():
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5060,
+        server=SERVER_HOST,
+        port=UDP_PORT,
         user="nopass",
         credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
@@ -80,8 +80,8 @@ def nopass_phone():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_nopass():
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5060,
+        server=SERVER_HOST,
+        port=UDP_PORT,
         user="nopass",
         credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
@@ -107,8 +107,8 @@ def test_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5060,
+        server=SERVER_HOST,
+        port=UDP_PORT,
         user="pass",
         credentials_manager=cm,
         hostname="host.docker.internal",
@@ -132,8 +132,8 @@ def test_pass():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tcp_nopass():
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5061,
+        server=SERVER_HOST,
+        port=TCP_PORT,
         user="nopass",
         credentials_manager=CredentialsManager(),
         hostname="host.docker.internal",
@@ -160,8 +160,8 @@ def test_tcp_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5061,
+        server=SERVER_HOST,
+        port=TCP_PORT,
         user="pass",
         credentials_manager=cm,
         hostname="host.docker.internal",
@@ -186,8 +186,8 @@ def test_tcp_pass():
 @pytest.mark.skipif(TEST_CONDITION, reason=REASON)
 def test_tls_nopass():
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5062,
+        server=SERVER_HOST,
+        port=TLS_PORT,
         user="nopass",
         credentials_manager=CredentialsManager(),
         bind_ip=BIND_IP,
@@ -216,8 +216,8 @@ def test_tls_pass():
     cm = CredentialsManager()
     cm.add("pass", "Testing123!")
     voip_phone_parameter = VoIPPhoneParameter(
-        server="127.0.0.1",
-        port=5062,
+        server=SERVER_HOST,
+        port=TLS_PORT,
         user="pass",
         credentials_manager=cm,
         hostname="host.docker.internal",

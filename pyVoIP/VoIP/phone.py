@@ -43,9 +43,9 @@ class VoIPPhoneParameter:
     credentials_manager: Optional[CredentialsManager]
     bind_ip: Optional[str] = "0.0.0.0"
     bind_port: Optional[int] = 5060
-    bind_network: Optional[str] = "0.0.0.0/0",
-    hostname: Optional[str] = None,
-    remote_hostname: Optional[str] = None,
+    bind_network: Optional[str] = "0.0.0.0/0"
+    hostname: Optional[str] = None
+    remote_hostname: Optional[str] = None
     transport_mode: Optional[TransportMode] = TransportMode.UDP
     cert_file: Optional[str] = None
     key_file: Optional[str] = None
