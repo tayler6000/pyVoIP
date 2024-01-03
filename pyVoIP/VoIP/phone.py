@@ -18,11 +18,7 @@ import random
 import time
 
 
-__all__ = [
-    "PhoneStatus",
-    "VoIPPhone",
-    "VoIPPhoneParameter"
-]
+__all__ = ["PhoneStatus", "VoIPPhone", "VoIPPhoneParameter"]
 
 debug = pyVoIP.debug
 
@@ -58,18 +54,25 @@ class VoIPPhoneParameter:
 
 
 class VoIPPhone:
-    def __init__(
-        self,
-        voip_phone_parameter: VoIPPhoneParameter
-    ):
-        # data may transferred in voi
+    def __init__(self, voip_phone_parameter: VoIPPhoneParameter):
         self.voip_phone_parameter = voip_phone_parameter
-        if self.voip_phone_parameter.rtp_port_low > self.voip_phone_parameter.rtp_port_high:
+        if (
+            self.voip_phone_parameter.rtp_port_low
+            > self.voip_phone_parameter.rtp_port_high
+        ):
             raise InvalidRangeError(
-                "'rtp_port_high' must be >= 'rtp_port_low'"
+                "`rtp_port_high` must be >= `rtp_port_low`"
             )
-        self.callClass = self.voip_phone_parameter.callClass is not None and self.voip_phone_parameter.callClass or VoIPCall
-        self.sipClass = self.voip_phone_parameter.sipClass is not None and self.voip_phone_parameter.sipClass or SIP.SIPClient
+        self.callClass = (
+            self.voip_phone_parameter.callClass is not None
+            and self.voip_phone_parameter.callClass
+            or VoIPCall
+        )
+        self.sipClass = (
+            self.voip_phone_parameter.sipClass is not None
+            and self.voip_phone_parameter.sipClass
+            or SIP.SIPClient
+        )
         # data defined in class
         self._status = PhoneStatus.INACTIVE
         self.NSD = False
@@ -357,7 +360,10 @@ class VoIPPhone:
     def request_port(self, blocking=True) -> int:
         ports_available = [
             port
-            for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
+            for port in range(
+                self.voip_phone_parameter.rtp_port_low,
+                self.voip_phone_parameter.rtp_port_high + 1,
+            )
             if port not in self.assignedPorts
         ]
         if len(ports_available) == 0:
@@ -365,14 +371,20 @@ class VoIPPhone:
             self.release_ports()
             ports_available = [
                 port
-                for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
+                for port in range(
+                    self.voip_phone_parameter.rtp_port_low,
+                    self.voip_phone_parameter.rtp_port_high + 1,
+                )
                 if (port not in self.assignedPorts)
             ]
 
         while self.NSD and blocking and len(ports_available) == 0:
             ports_available = [
                 port
-                for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
+                for port in range(
+                    self.voip_phone_parameter.rtp_port_low,
+                    self.voip_phone_parameter.rtp_port_high + 1,
+                )
                 if (port not in self.assignedPorts)
             ]
             time.sleep(0.5)

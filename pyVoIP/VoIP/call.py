@@ -54,8 +54,8 @@ class VoIPCall:
         self.session_id = str(session_id)
         self.bind_ip = bind_ip
         self.conn = conn
-        self.rtp_port_high = self.phone.rtp_port_high
-        self.rtp_port_low = self.phone.rtp_port_low
+        self.rtp_port_high = self.phone.voip_phone_parameter.rtp_port_high
+        self.rtp_port_low = self.phone.voip_phone_parameter.rtp_port_low
         self.sendmode = sendmode
 
         self.dtmfLock = Lock()
