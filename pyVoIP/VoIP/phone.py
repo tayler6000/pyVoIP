@@ -12,6 +12,7 @@ from pyVoIP.VoIP.error import (
 )
 from threading import Timer, Lock
 from typing import Callable, Dict, List, Optional, Type
+from dataclasses import dataclass
 import pyVoIP
 import random
 import time
@@ -20,6 +21,7 @@ import time
 __all__ = [
     "PhoneStatus",
     "VoIPPhone",
+    "VoIPPhoneParameter"
 ]
 
 debug = pyVoIP.debug
@@ -33,52 +35,50 @@ class PhoneStatus(Enum):
     FAILED = "FAILED"
 
 
+@dataclass
+class VoIPPhoneParameter:
+    server: str
+    port: int
+    user: str
+    credentials_manager: Optional[CredentialsManager]
+    bind_ip: Optional[str] = "0.0.0.0"
+    bind_port: Optional[int] = 5060
+    bind_network: Optional[str] = "0.0.0.0/0",
+    hostname: Optional[str] = None,
+    remote_hostname: Optional[str] = None,
+    transport_mode: Optional[TransportMode] = TransportMode.UDP
+    cert_file: Optional[str] = None
+    key_file: Optional[str] = None
+    key_password: Optional[KEY_PASSWORD] = None
+    callback: Optional[Callable[["VoIPCall"], None]] = None
+    rtp_port_low: Optional[int] = 10000
+    rtp_port_high: Optional[int] = 20000
+    callClass: Type[VoIPCall] = None
+    sipClass: Type[SIP.SIPClient] = None
+
+
 class VoIPPhone:
     def __init__(
         self,
-        server: str,
-        port: int,
-        user: str,
-        credentials_manager: CredentialsManager,
-        bind_ip="0.0.0.0",
-        bind_network="0.0.0.0/0",
-        hostname: Optional[str] = None,
-        remote_hostname: Optional[str] = None,
-        bind_port=5060,
-        transport_mode=TransportMode.UDP,
-        cert_file: Optional[str] = None,
-        key_file: Optional[str] = None,
-        key_password: KEY_PASSWORD = None,
-        call_callback: Optional[Callable[["VoIPCall"], None]] = None,
-        rtp_port_low=10000,
-        rtp_port_high=20000,
-        callClass: Type[VoIPCall] = None,
-        sipClass: Type[SIP.SIPClient] = None,
+        voip_phone_parameter: VoIPPhoneParameter
     ):
-        if rtp_port_low > rtp_port_high:
+        # data may transferred in voi
+        self.voip_phone_parameter = voip_phone_parameter
+        if self.voip_phone_parameter.rtp_port_low > self.voip_phone_parameter.rtp_port_high:
             raise InvalidRangeError(
                 "'rtp_port_high' must be >= 'rtp_port_low'"
             )
-
-        self.rtp_port_low = rtp_port_low
-        self.rtp_port_high = rtp_port_high
+        self.callClass = self.voip_phone_parameter.callClass is not None and self.voip_phone_parameter.callClass or VoIPCall
+        self.sipClass = self.voip_phone_parameter.sipClass is not None and self.voip_phone_parameter.sipClass or SIP.SIPClient
+        # data defined in class
+        self._status = PhoneStatus.INACTIVE
         self.NSD = False
-
-        self.callClass = callClass is not None and callClass or VoIPCall
-        self.sipClass = sipClass is not None and sipClass or SIP.SIPClient
 
         self.portsLock = Lock()
         self.assignedPorts: List[int] = []
         self.session_ids: List[int] = []
 
-        self.server = server
-        self.port = port
-        self.bind_ip = bind_ip
-        self.user = user
-        self.credentials_manager = credentials_manager
-        self.call_callback = call_callback
         self._status = PhoneStatus.INACTIVE
-        self.transport_mode = transport_mode
 
         # "recvonly", "sendrecv", "sendonly", "inactive"
         self.sendmode = "sendrecv"
@@ -89,17 +89,17 @@ class VoIPPhone:
         # Allows you to find call ID based off thread.
         self.threadLookup: Dict[Timer, str] = {}
         self.sip = self.sipClass(
-            server,
-            port,
-            user,
-            credentials_manager,
-            bind_ip=self.bind_ip,
-            bind_network=bind_network,
-            hostname=hostname,
-            remote_hostname=remote_hostname,
-            bind_port=bind_port,
-            call_callback=self.callback,
-            transport_mode=self.transport_mode,
+            self.voip_phone_parameter.server,
+            self.voip_phone_parameter.port,
+            self.voip_phone_parameter.user,
+            self.voip_phone_parameter.credentials_manager,
+            bind_ip=self.voip_phone_parameter.bind_ip,
+            bind_network=self.voip_phone_parameter.bind_network,
+            hostname=self.voip_phone_parameter.hostname,
+            remote_hostname=self.voip_phone_parameter.remote_hostname,
+            bind_port=self.voip_phone_parameter.bind_port,
+            call_callback=self.voip_phone_parameter.callback,
+            transport_mode=self.voip_phone_parameter.transport_mode,
         )
 
     def callback(
@@ -280,7 +280,7 @@ class VoIPPhone:
             CallState.RINGING,
             request,
             sess_id,
-            self.bind_ip,
+            self.voip_phone_parameter.bind_ip,
             conn=conn,
             sendmode=self.recvmode,
         )
@@ -340,7 +340,7 @@ class VoIPPhone:
             CallState.DIALING,
             request,
             sess_id,
-            self.bind_ip,
+            self.voip_phone_parameter.bind_ip,
             ms=medias,
             sendmode=self.sendmode,
             conn=conn,
@@ -357,7 +357,7 @@ class VoIPPhone:
     def request_port(self, blocking=True) -> int:
         ports_available = [
             port
-            for port in range(self.rtp_port_low, self.rtp_port_high + 1)
+            for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
             if port not in self.assignedPorts
         ]
         if len(ports_available) == 0:
@@ -365,14 +365,14 @@ class VoIPPhone:
             self.release_ports()
             ports_available = [
                 port
-                for port in range(self.rtp_port_low, self.rtp_port_high + 1)
+                for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
                 if (port not in self.assignedPorts)
             ]
 
         while self.NSD and blocking and len(ports_available) == 0:
             ports_available = [
                 port
-                for port in range(self.rtp_port_low, self.rtp_port_high + 1)
+                for port in range(self.voip_phone_parameter.rtp_port_low, self.voip_phone_parameter.rtp_port_high + 1)
                 if (port not in self.assignedPorts)
             ]
             time.sleep(0.5)
