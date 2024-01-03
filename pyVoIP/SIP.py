@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 from threading import Timer, Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from pyVoIP.util import acquired_lock_and_unblocked_socket
 from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
 import hashlib
@@ -37,6 +38,10 @@ class InvalidAccountInfoError(Exception):
 
 
 class SIPParseError(Exception):
+    pass
+
+
+class RetryRequiredError(Exception):
     pass
 
 
@@ -842,40 +847,41 @@ class SIPClient:
         self.registerFailures = 0
         self.recvLock = Lock()
 
-    def recv(self) -> None:
+    def recv_loop(self) -> None:
         while self.NSD:
-            self.recvLock.acquire()
-            self.s.setblocking(False)
             try:
-                raw = self.s.recv(8192)
-                if raw != b"\x00\x00\x00\x00":
-                    try:
-                        message = SIPMessage(raw)
-                        debug(message.summary())
-                        self.parseMessage(message)
-                    except Exception as ex:
-                        debug(f"Error on header parsing: {ex}")
+                with acquired_lock_and_unblocked_socket(self.recvLock, self.s):
+                    self.recv()
             except BlockingIOError:
-                self.s.setblocking(True)
-                self.recvLock.release()
                 time.sleep(0.01)
                 continue
-            except SIPParseError as e:
-                if "SIP Version" in str(e):
-                    request = self.genSIPVersionNotSupported(message)
-                    self.out.sendto(
-                        request.encode("utf8"), (self.server, self.port)
-                    )
-                else:
-                    debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
-            except Exception as e:
-                debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
-                if pyVoIP.DEBUG:
-                    self.s.setblocking(True)
-                    self.recvLock.release()
-                    raise
-            self.s.setblocking(True)
-            self.recvLock.release()
+
+    def recv(self) -> None:
+        try:
+            raw = self.s.recv(8192)
+            if raw != b"\x00\x00\x00\x00":
+                try:
+                    message = SIPMessage(raw)
+                    debug(message.summary())
+                    self.parseMessage(message)
+                except Exception as ex:
+                    debug(f"Error on header parsing: {ex}")
+        except SIPParseError as e:
+            if "SIP Version" in str(e):
+                request = self.genSIPVersionNotSupported(message)
+                self.out.sendto(
+                    request.encode("utf8"), (self.server, self.port)
+                )
+            else:
+                debug(f"SIPParseError in SIP.recv: {type(e)}, {e}")
+        except BlockingIOError:
+            # Re-raise BlockingIOError so recv_loop() can release locks and
+            # continue
+            raise
+        except Exception as e:
+            debug(f"SIP.recv error: {type(e)}, {e}\n\n{str(raw, 'utf8')}")
+            if pyVoIP.DEBUG:
+                raise
 
     def parseMessage(self, message: SIPMessage) -> None:
         warnings.warn(
@@ -955,7 +961,7 @@ class SIPClient:
         self.s.bind((self.myIP, self.myPort))
         self.out = self.s
         self.register()
-        t = Timer(1, self.recv)
+        t = Timer(1, self.recv_loop)
         t.name = "SIP Recieve"
         t.start()
 
@@ -1596,52 +1602,49 @@ class SIPClient:
         invite = self.genInvite(
             number, str(sess_id), ms, sendtype, branch, call_id
         )
-        self.recvLock.acquire()
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
-        debug("Invited")
-        response = SIPMessage(self.s.recv(8192))
-
-        while (
-            response.status != SIPStatus(401)
-            and response.status != SIPStatus(100)
-            and response.status != SIPStatus(180)
-        ) or response.headers["Call-ID"] != call_id:
-            if not self.NSD:
-                break
-            self.parseMessage(response)
+        with self.recvLock:
+            self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+            debug("Invited")
             response = SIPMessage(self.s.recv(8192))
 
-        if response.status == SIPStatus(100) or response.status == SIPStatus(
-            180
-        ):
-            self.recvLock.release()
+            while (
+                response.status != SIPStatus(401)
+                and response.status != SIPStatus(100)
+                and response.status != SIPStatus(180)
+            ) or response.headers["Call-ID"] != call_id:
+                if not self.NSD:
+                    break
+                self.parseMessage(response)
+                response = SIPMessage(self.s.recv(8192))
+
+            if response.status == SIPStatus(
+                100
+            ) or response.status == SIPStatus(180):
+                return SIPMessage(invite.encode("utf8")), call_id, sess_id
+            debug(f"Received Response: {response.summary()}")
+            ack = self.genAck(response)
+            self.out.sendto(ack.encode("utf8"), (self.server, self.port))
+            debug("Acknowledged")
+            authhash = self.genAuthorization(response)
+            nonce = response.authentication["nonce"]
+            realm = response.authentication["realm"]
+            auth = (
+                f'Authorization: Digest username="{self.username}",realm='
+                + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
+                + f'transport=UDP",response="{str(authhash, "utf8")}",'
+                + "algorithm=MD5\r\n"
+            )
+
+            invite = self.genInvite(
+                number, str(sess_id), ms, sendtype, branch, call_id
+            )
+            invite = invite.replace(
+                "\r\nContent-Length", f"\r\n{auth}Content-Length"
+            )
+
+            self.out.sendto(invite.encode("utf8"), (self.server, self.port))
+
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
-        debug(f"Received Response: {response.summary()}")
-        ack = self.genAck(response)
-        self.out.sendto(ack.encode("utf8"), (self.server, self.port))
-        debug("Acknowledged")
-        authhash = self.genAuthorization(response)
-        nonce = response.authentication["nonce"]
-        realm = response.authentication["realm"]
-        auth = (
-            f'Authorization: Digest username="{self.username}",realm='
-            + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
-            + f'transport=UDP",response="{str(authhash, "utf8")}",'
-            + "algorithm=MD5\r\n"
-        )
-
-        invite = self.genInvite(
-            number, str(sess_id), ms, sendtype, branch, call_id
-        )
-        invite = invite.replace(
-            "\r\nContent-Length", f"\r\n{auth}Content-Length"
-        )
-
-        self.out.sendto(invite.encode("utf8"), (self.server, self.port))
-
-        self.recvLock.release()
-
-        return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
     def bye(self, request: SIPMessage) -> None:
         message = self.genBye(request)
@@ -1650,7 +1653,8 @@ class SIPClient:
 
     def deregister(self) -> bool:
         try:
-            deregistered = self.__deregister()
+            with self.recvLock:
+                deregistered = self.__deregister()
             if not deregistered:
                 debug("DEREGISTERATION FAILED")
                 return False
@@ -1660,12 +1664,16 @@ class SIPClient:
             return deregistered
         except BaseException as e:
             debug(f"DEREGISTERATION ERROR: {e}")
+            # TODO: a maximum tries check should be implemented otherwise a
+            # RecursionError will throw
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.deregister()
             if type(e) is OSError:
                 raise
             return False
 
     def __deregister(self) -> bool:
-        self.recvLock.acquire()
         self.phone._status = PhoneStatus.DEREGISTERING
         firstRequest = self.genFirstRequest(deregister=True)
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
@@ -1676,7 +1684,6 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
-            self.recvLock.release()
             raise TimeoutError("Deregistering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1696,7 +1703,6 @@ class SIPClient:
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
-                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1710,23 +1716,20 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
-                self.recvLock.release()
                 raise TimeoutError("Deregistering on SIP Server timed out")
 
         if response.status == SIPStatus(500):
-            self.recvLock.release()
-            time.sleep(5)
-            return self.deregister()
+            # We raise so the calling function can sleep and try again
+            raise RetryRequiredError("Response SIP status of 500")
 
         if response.status == SIPStatus.OK:
-            self.recvLock.release()
             return True
-        self.recvLock.release()
         return False
 
     def register(self) -> bool:
         try:
-            registered = self.__register()
+            with self.recvLock:
+                registered = self.__register()
             if not registered:
                 debug("REGISTERATION FAILED")
                 self.registerFailures += 1
@@ -1749,6 +1752,9 @@ class SIPClient:
                 self.stop()
                 self.fatalCallback()
                 return False
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.register()
             self.__start_register_timer(delay=0)
 
     def __start_register_timer(self, delay: Optional[int] = None):
@@ -1764,7 +1770,6 @@ class SIPClient:
             self.registerThread.start()
 
     def __register(self) -> bool:
-        self.recvLock.acquire()
         self.phone._status = PhoneStatus.REGISTERING
         firstRequest = self.genFirstRequest()
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
@@ -1775,7 +1780,6 @@ class SIPClient:
         if ready[0]:
             resp = self.s.recv(8192)
         else:
-            self.recvLock.release()
             raise TimeoutError("Registering on SIP Server timed out")
 
         response = SIPMessage(resp)
@@ -1814,7 +1818,6 @@ class SIPClient:
                     debug("\nRECEIVED")
                     debug(response.summary())
                     debug("=" * 50)
-                    self.recvLock.release()
                     raise InvalidAccountInfoError(
                         "Invalid Username or "
                         + "Password for SIP server "
@@ -1828,7 +1831,6 @@ class SIPClient:
                     # with new urn:uuid or reply with expire 0
                     self._handle_bad_request()
             else:
-                self.recvLock.release()
                 raise TimeoutError("Registering on SIP Server timed out")
 
         if response.status == SIPStatus(407):
@@ -1844,9 +1846,8 @@ class SIPClient:
         ]:
             # Unauthorized
             if response.status == SIPStatus(500):
-                self.recvLock.release()
-                time.sleep(5)
-                return self.register()
+                # We raise so the calling function can sleep and try again
+                raise RetryRequiredError("Response SIP status of 500")
             else:
                 # TODO: determine if needed here
                 self.parseMessage(response)
@@ -1854,7 +1855,6 @@ class SIPClient:
         debug(response.summary())
         debug(response.raw)
 
-        self.recvLock.release()
         if response.status == SIPStatus.OK:
             return True
         else:
@@ -1873,16 +1873,17 @@ class SIPClient:
 
     def subscribe(self, lastresponse: SIPMessage) -> None:
         # TODO: check if needed and maybe implement fully
-        self.recvLock.acquire()
+        with self.recvLock:
+            subRequest = self.genSubscribe(lastresponse)
+            self.out.sendto(
+                subRequest.encode("utf8"), (self.server, self.port)
+            )
 
-        subRequest = self.genSubscribe(lastresponse)
-        self.out.sendto(subRequest.encode("utf8"), (self.server, self.port))
+            response = SIPMessage(self.s.recv(8192))
 
-        response = SIPMessage(self.s.recv(8192))
-
-        debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
-
-        self.recvLock.release()
+            debug(
+                f'Got response to subscribe: {str(response.heading, "utf8")}'
+            )
 
     def trying_timeout_check(self, response: SIPMessage) -> SIPMessage:
         """
