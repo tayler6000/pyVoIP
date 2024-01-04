@@ -1,4 +1,3 @@
-from enum import Enum
 from pyVoIP import SIP, RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.sock.sock import VoIPConnection
@@ -10,6 +9,7 @@ from pyVoIP.VoIP.error import (
     InvalidStateError,
     NoPortsAvailableError,
 )
+from pyVoIP.VoIP.status import PhoneStatus
 from threading import Timer, Lock
 from typing import Callable, Dict, List, Optional, Type
 from dataclasses import dataclass
@@ -18,17 +18,10 @@ import random
 import time
 
 
-__all__ = ["PhoneStatus", "VoIPPhone", "VoIPPhoneParameter"]
+__all__ = ["VoIPPhone", "VoIPPhoneParameter"]
+
 
 debug = pyVoIP.debug
-
-
-class PhoneStatus(Enum):
-    INACTIVE = "INACTIVE"
-    REGISTERING = "REGISTERING"
-    REGISTERED = "REGISTERED"
-    DEREGISTERING = "DEREGISTERING"
-    FAILED = "FAILED"
 
 
 @dataclass
@@ -96,12 +89,14 @@ class VoIPPhone:
             self.voip_phone_parameter.port,
             self.voip_phone_parameter.user,
             self.voip_phone_parameter.credentials_manager,
+            phone=self,
             bind_ip=self.voip_phone_parameter.bind_ip,
             bind_network=self.voip_phone_parameter.bind_network,
             hostname=self.voip_phone_parameter.hostname,
             remote_hostname=self.voip_phone_parameter.remote_hostname,
             bind_port=self.voip_phone_parameter.bind_port,
             call_callback=self.voip_phone_parameter.callback,
+            fatal_callback=self.fatal,
             transport_mode=self.voip_phone_parameter.transport_mode,
         )
 
@@ -293,7 +288,6 @@ class VoIPPhone:
         self._status = PhoneStatus.REGISTERING
         try:
             self.sip.start()
-            self._status = PhoneStatus.REGISTERED
             self.NSD = True
         except Exception:
             self._status = PhoneStatus.FAILED
@@ -301,7 +295,7 @@ class VoIPPhone:
             self.NSD = False
             raise
 
-    def stop(self) -> None:
+    def stop(self, failed=False) -> None:
         self._status = PhoneStatus.DEREGISTERING
         for x in self.calls.copy():
             try:
@@ -311,6 +305,11 @@ class VoIPPhone:
         self.sip.stop()
         self.NSD = False
         self._status = PhoneStatus.INACTIVE
+        if failed:
+            self._status = PhoneStatus.FAILED
+
+    def fatal(self) -> None:
+        self.stop(failed=True)
 
     def call(
         self,
@@ -401,9 +400,9 @@ class VoIPPhone:
         return selection
 
     def release_ports(self, call: Optional[VoIPCall] = None) -> None:
-        self.portsLock.acquire()
-        self._cleanup_dead_calls()
-        try:
+        with self.portsLock:
+            self._cleanup_dead_calls()
+
             if isinstance(call, VoIPCall):
                 ports = list(call.assignedPorts.keys())
             else:
@@ -417,8 +416,6 @@ class VoIPPhone:
 
             for port in ports:
                 self.assignedPorts.remove(port)
-        finally:
-            self.portsLock.release()
 
     def _cleanup_dead_calls(self) -> None:
         to_delete = []

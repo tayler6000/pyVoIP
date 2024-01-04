@@ -2,12 +2,13 @@ from base64 import b16encode, b64encode
 from threading import Timer
 from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from pyVoIP.credentials import CredentialsManager
+from pyVoIP.helpers import Counter
+from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.SIP.error import (
     SIPParseError,
     InvalidAccountInfoError,
+    RetryRequiredError,
 )
-from pyVoIP.helpers import Counter
-from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.SIP.message import (
     SIPMessage,
     SIPStatus,
@@ -15,6 +16,7 @@ from pyVoIP.SIP.message import (
 )
 from pyVoIP.sock.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
+from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
 import hashlib
 import random
@@ -25,6 +27,7 @@ import uuid
 if TYPE_CHECKING:
     from pyVoIP import RTP
     from pyVoIP.sock import VoIPConnection
+    from pyVoIP.VoIP import VoIPPhone
 
 
 debug = pyVoIP.debug
@@ -44,6 +47,7 @@ class SIPClient:
         port: int,
         user: str,
         credentials_manager: CredentialsManager,
+        phone: "VoIPPhone",
         bind_ip="0.0.0.0",
         bind_network="0.0.0.0/0",
         hostname: Optional[str] = None,
@@ -52,6 +56,7 @@ class SIPClient:
         call_callback: Optional[
             Callable[["VoIPConnection", SIPMessage], Optional[str]]
         ] = None,
+        fatal_callback: Optional[Callable[..., None]] = None,
         transport_mode: TransportMode = TransportMode.UDP,
         cert_file: Optional[str] = None,
         key_file: Optional[str] = None,
@@ -65,12 +70,14 @@ class SIPClient:
         self.nat = NAT(bind_ip, bind_network, hostname, remote_hostname)
         self.user = user
         self.credentials_manager = credentials_manager
+        self.phone = phone
         self.transport_mode = transport_mode
         self.cert_file = cert_file
         self.key_file = key_file
         self.key_password = key_password
 
         self.call_callback = call_callback
+        self.fatal_callback = fatal_callback
 
         self.tags: List[str] = []
         self.tagLibrary = {"register": self.gen_tag()}
@@ -91,6 +98,7 @@ class SIPClient:
         self.nc: Dict[str, Counter] = {}
 
         self.registerThread: Optional[Timer] = None
+        self.register_failures = 0
 
     def recv(self) -> None:
         while self.NSD:
@@ -1003,6 +1011,7 @@ class SIPClient:
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         cseq = request.headers["CSeq"]["check"]
         byeRequest += f"CSeq: {cseq} {cmd}\r\n"
+        byeRequest += "Max-Forwards: 70\r\n"
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
         byeRequest += self.__gen_contact(
             method,
@@ -1197,6 +1206,28 @@ class SIPClient:
         self.sendto(message)
 
     def deregister(self) -> bool:
+        try:
+            deregistered = self.__deregister()
+            if not deregistered:
+                debug("DEREGISTERATION FAILED")
+                return False
+            else:
+                self.phone._status = PhoneStatus.INACTIVE
+
+            return deregistered
+        except BaseException as e:
+            debug(f"DEREGISTERATION ERROR: {e}")
+            # TODO: a maximum tries check should be implemented otherwise a
+            # RecursionError will throw
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.deregister()
+            if type(e) is OSError:
+                raise
+            return False
+
+    def __deregister(self) -> bool:
+        self.phone._status = PhoneStatus.DEREGISTERING
         first_request = self.gen_first_request(deregister=True)
         conn = self.send(first_request)
 
@@ -1224,7 +1255,10 @@ class SIPClient:
             debug("Proxy auth required")
 
         elif response.status == SIPStatus(500):
-            raise Exception("Received a 500 error when deregistering.")
+            # We raise so the calling function can sleep and try again
+            raise RetryRequiredError(
+                "Received a 500 error when deregistering."
+            )
 
         elif response.status == SIPStatus.OK:
             return True
@@ -1253,6 +1287,48 @@ class SIPClient:
         )
 
     def register(self) -> bool:
+        try:
+            registered = self.__register()
+            if not registered:
+                debug("REGISTERATION FAILED")
+                self.registerFailures += 1
+            else:
+                self.phone._status = PhoneStatus.REGISTERED
+                self.registerFailures = 0
+
+            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+                debug("Too many registration failures, stopping.")
+                self.stop()
+                self.fatalCallback()
+                return False
+            self.__start_register_timer()
+
+            return registered
+        except BaseException as e:
+            debug(f"REGISTERATION ERROR: {e}")
+            self.registerFailures += 1
+            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+                self.stop()
+                self.fatalCallback()
+                return False
+            if isinstance(e, RetryRequiredError):
+                time.sleep(5)
+                return self.register()
+            self.__start_register_timer(delay=0)
+
+    def __start_register_timer(self, delay: Optional[int] = None):
+        if delay is None:
+            delay = self.default_expires - 5
+        if self.NSD:
+            debug("New register thread")
+            self.registerThread = Timer(delay, self.register)
+            self.registerThread.name = (
+                "SIP Register CSeq: " + f"{self.registerCounter.x}"
+            )
+            self.registerThread.start()
+
+    def __register(self) -> bool:
+        self.phone._status = PhoneStatus.REGISTERING
         first_request = self.gen_first_request()
         conn = self.send(first_request)
 
@@ -1280,18 +1356,10 @@ class SIPClient:
             debug("Proxy auth required")
 
         elif response.status == SIPStatus(500):
-            raise Exception("Received a 500 error when registering.")
+            # We raise so the calling function can sleep and try again
+            raise RetryRequiredError("Received a 500 error when registering.")
 
         elif response.status == SIPStatus.OK:
-            if self.NSD:
-                # self.subscribe(response)
-                self.registerThread = Timer(
-                    self.default_expires - 5, self.register
-                )
-                self.registerThread.name = (
-                    "SIP Register CSeq: " + f"{self.registerCounter.x}"
-                )
-                self.registerThread.start()
             return True
 
         elif response.status == SIPStatus(401):

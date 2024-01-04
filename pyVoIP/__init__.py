@@ -2,7 +2,7 @@ import ssl
 
 __all__ = ["SIP", "RTP", "VoIP"]
 
-version_info = (2, 0, 0)
+version_info = (2, 0, 0, "dev0")
 
 __version__ = ".".join([str(x) for x in version_info])
 
@@ -26,6 +26,12 @@ MD5 Digest authentication is deprecated as it a weak hash. However, it is still
 used often so it is enabled by default.
 """
 ALLOW_MD5_AUTH = True
+
+"""
+If registration fails this many times, VoIPPhone's status will be set to FAILED
+and the phone will stop.
+"""
+REGISTER_FAILURE_THRESHOLD = 3
 
 # TODO: Implement
 """

@@ -170,11 +170,10 @@ class RTPPacketManager:
         # This acts functionally as a lock while the buffer is being rebuilt.
         while self.rebuilding:
             time.sleep(0.01)
-        self.bufferLock.acquire()
-        packet = self.buffer.read(length)
-        if len(packet) < length:
-            packet = packet + (b"\x80" * (length - len(packet)))
-        self.bufferLock.release()
+        with self.bufferLock:
+            packet = self.buffer.read(length)
+            if len(packet) < length:
+                packet = packet + (b"\x80" * (length - len(packet)))
         return packet
 
     def rebuild(self, reset: bool, offset: int = 0, data: bytes = b"") -> None:
@@ -192,6 +191,7 @@ class RTPPacketManager:
         self.rebuilding = False
 
     def write(self, offset: int, data: bytes) -> None:
+        # TODO: Can this safely be changed to use context manager syntax?
         self.bufferLock.acquire()
         self.log[offset] = data
         bufferloc = self.buffer.tell()
@@ -336,6 +336,8 @@ class RTPClient:
 
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Some systems just reply to the port they receive from instead of
+        # listening to the SDP.
         self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sin.bind((self.in_ip, self.in_port))
         self.sin.setblocking(False)

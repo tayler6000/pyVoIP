@@ -152,6 +152,8 @@ class VoIPCall:
             return
 
         for i in request.body["m"]:
+            if i["type"] == "video":  # Disable Video
+                continue
             assoc = {}
             e = False
             for x in i["methods"]:
@@ -189,6 +191,10 @@ class VoIPCall:
                         assoc[int(x)] = p
 
             if e:
+                if pt:
+                    raise RTP.RTPParseError(
+                        f"RTP Payload type {pt} not found."
+                    )
                 raise RTP.RTPParseError(f"RTP Payload type {pt} not found.")
 
             # Make sure codecs are compatible.
@@ -229,18 +235,16 @@ class VoIPCall:
             self.phone.release_ports(call=self)
 
     def dtmf_callback(self, code: str) -> None:
-        self.dtmfLock.acquire()
-        bufferloc = self.dtmf.tell()
-        self.dtmf.seek(0, 2)
-        self.dtmf.write(code)
-        self.dtmf.seek(bufferloc, 0)
-        self.dtmfLock.release()
+        with self.dtmfLock:
+            bufferloc = self.dtmf.tell()
+            self.dtmf.seek(0, 2)
+            self.dtmf.write(code)
+            self.dtmf.seek(bufferloc, 0)
 
     def get_dtmf(self, length=1) -> str:
-        self.dtmfLock.acquire()
-        packet = self.dtmf.read(length)
-        self.dtmfLock.release()
-        return packet
+        with self.dtmfLock:
+            packet = self.dtmf.read(length)
+            return packet
 
     def gen_ms(self) -> Dict[int, Dict[int, RTP.PayloadType]]:
         """
@@ -263,6 +267,8 @@ class VoIPCall:
         )
         self.sip.sendto(message, self.request.headers["Via"][0]["address"])
         for i in request.body["m"]:
+            if i["type"] == "video":  # Disable Video
+                continue
             for ii, client in zip(
                 range(len(request.body["c"])), self.RTPClients
             ):
@@ -369,8 +375,9 @@ class VoIPCall:
 
     def rtp_answered(self, request: SIP.SIPMessage) -> None:
         for i in request.body["m"]:
+            if i["type"] == "video":  # Disable Video
+                continue
             assoc = {}
-            e = False
             for x in i["methods"]:
                 try:
                     p = RTP.PayloadType(int(x))
@@ -382,10 +389,13 @@ class VoIPCall:
                         )
                         assoc[int(x)] = p
                     except ValueError:
-                        e = True
-
-            if e:
-                raise RTP.RTPParseError(f"RTP Payload type {p} not found.")
+                        if p:
+                            raise RTP.RTPParseError(
+                                f"RTP Payload type {p} not found."
+                            )
+                        raise RTP.RTPParseError(
+                            f"RTP Payload type {p} not found."
+                        )
 
             self.create_rtp_clients(
                 assoc, self.bind_ip, self.port, request, i["port"]

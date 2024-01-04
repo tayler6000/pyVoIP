@@ -4,3 +4,7 @@ class InvalidAccountInfoError(Exception):
 
 class SIPParseError(Exception):
     pass
+
+
+class RetryRequiredError(Exception):
+    pass
