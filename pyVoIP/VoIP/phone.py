@@ -11,7 +11,7 @@ from pyVoIP.VoIP.error import (
 )
 from pyVoIP.VoIP.status import PhoneStatus
 from threading import Timer, Lock
-from typing import Callable, Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type
 from dataclasses import dataclass
 import pyVoIP
 import random
