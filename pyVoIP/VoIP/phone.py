@@ -39,11 +39,10 @@ class VoIPPhoneParameter:
     cert_file: Optional[str] = None
     key_file: Optional[str] = None
     key_password: Optional[KEY_PASSWORD] = None
-    callback: Optional[Callable[["VoIPCall"], None]] = None
     rtp_port_low: Optional[int] = 10000
     rtp_port_high: Optional[int] = 20000
-    callClass: Type[VoIPCall] = None
-    sipClass: Type[SIP.SIPClient] = None
+    call_class: Type[VoIPCall] = None
+    sip_class: Type[SIP.SIPClient] = None
 
 
 class VoIPPhone:
@@ -56,14 +55,14 @@ class VoIPPhone:
             raise InvalidRangeError(
                 "`rtp_port_high` must be >= `rtp_port_low`"
             )
-        self.callClass = (
-            self.voip_phone_parameter.callClass is not None
-            and self.voip_phone_parameter.callClass
+        self.call_class = (
+            self.voip_phone_parameter.call_class is not None
+            and self.voip_phone_parameter.call_call
             or VoIPCall
         )
-        self.sipClass = (
-            self.voip_phone_parameter.sipClass is not None
-            and self.voip_phone_parameter.sipClass
+        self.sip_class = (
+            self.voip_phone_parameter.sip_class is not None
+            and self.voip_phone_parameter.sip_class
             or SIP.SIPClient
         )
         # data defined in class
@@ -84,7 +83,7 @@ class VoIPPhone:
         self.threads: List[Timer] = []
         # Allows you to find call ID based off thread.
         self.threadLookup: Dict[Timer, str] = {}
-        self.sip = self.sipClass(
+        self.sip = self.sip_class(
             self.voip_phone_parameter.server,
             self.voip_phone_parameter.port,
             self.voip_phone_parameter.user,
@@ -95,7 +94,7 @@ class VoIPPhone:
             hostname=self.voip_phone_parameter.hostname,
             remote_hostname=self.voip_phone_parameter.remote_hostname,
             bind_port=self.voip_phone_parameter.bind_port,
-            call_callback=self.voip_phone_parameter.callback,
+            call_callback=self.callback,
             fatal_callback=self.fatal,
             transport_mode=self.voip_phone_parameter.transport_mode,
         )
@@ -127,7 +126,7 @@ class VoIPPhone:
                 self._callback_RESP_Busy(request)
             elif request.status == SIP.SIPStatus.REQUEST_TERMINATED:
                 self._callback_RESP_Terminated(request)
-        return None  # mypy needs this for some reason.
+        return None
 
     def get_status(self) -> PhoneStatus:
         return self._status
@@ -136,7 +135,7 @@ class VoIPPhone:
         self, conn: VoIPConnection, request: SIP.SIPMessage
     ) -> None:
         call_id = request.headers["Call-ID"]
-        if self.callClass is None:
+        if self.call_class is None:
             message = self.sip.gen_busy(request)
             conn.send(message)
         else:
@@ -173,7 +172,7 @@ class VoIPPhone:
     def _callback_MSG_Options(self, request: SIP.SIPMessage) -> str:
         debug("Options recieved")
         response = self.sip.gen_busy(request)
-        if self.callClass:
+        if self.call_class:
             response = response.replace("486 Busy Here", "200 OK")
             # TODO: Remove warning, implement RFC 3264
         return response
@@ -273,7 +272,7 @@ class VoIPPhone:
         subclassing.
         """
         call_id = request.headers["Call-ID"]
-        self.calls[call_id] = self.callClass(
+        self.calls[call_id] = self.call_class(
             self,
             CallState.RINGING,
             request,
@@ -337,7 +336,7 @@ class VoIPPhone:
         request, call_id, sess_id, conn = self.sip.invite(
             number, medias, RTP.TransmitType.SENDRECV
         )
-        self.calls[call_id] = self.callClass(
+        self.calls[call_id] = self.call_class(
             self,
             CallState.DIALING,
             request,
