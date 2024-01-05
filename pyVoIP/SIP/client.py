@@ -721,7 +721,7 @@ class SIPClient:
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
         body += (
-            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP4 {self.bind_ip}\r\n"
+            f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP4 {self.bind_ip}\r\n"
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
         # TODO: Check IPv4/IPv6
@@ -781,7 +781,7 @@ class SIPClient:
         # Generate body first for content length
         body = "v=0\r\n"
         body += (
-            f"o=pyVoIP {sess_id} {int(sess_id)+2} IN IP"
+            f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP"
             + f"{self.nat.bind_ip.version} {self.bind_ip}\r\n"
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
@@ -1291,25 +1291,25 @@ class SIPClient:
             registered = self.__register()
             if not registered:
                 debug("REGISTERATION FAILED")
-                self.registerFailures += 1
+                self.register_failures += 1
             else:
                 self.phone._status = PhoneStatus.REGISTERED
-                self.registerFailures = 0
+                self.register_failures = 0
 
-            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+            if self.register_failures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
                 debug("Too many registration failures, stopping.")
                 self.stop()
-                self.fatalCallback()
+                self.fatal_callback()
                 return False
             self.__start_register_timer()
 
             return registered
         except BaseException as e:
             debug(f"REGISTERATION ERROR: {e}")
-            self.registerFailures += 1
-            if self.registerFailures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
+            self.register_failures += 1
+            if self.register_failures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
                 self.stop()
-                self.fatalCallback()
+                self.fatal_callback()
                 return False
             if isinstance(e, RetryRequiredError):
                 time.sleep(5)

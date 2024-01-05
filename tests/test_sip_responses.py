@@ -1,4 +1,4 @@
-from pyVoIP.SIP import SIPMessage
+from pyVoIP.SIP.message import SIPMessage
 import pytest
 
 
