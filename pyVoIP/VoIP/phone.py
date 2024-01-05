@@ -57,7 +57,7 @@ class VoIPPhone:
             )
         self.call_class = (
             self.voip_phone_parameter.call_class is not None
-            and self.voip_phone_parameter.call_call
+            and self.voip_phone_parameter.call_class
             or VoIPCall
         )
         self.sip_class = (
