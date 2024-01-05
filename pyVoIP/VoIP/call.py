@@ -1,5 +1,5 @@
 from enum import Enum
-from pyVoIP import RTP, SIP
+from pyVoIP import RTP
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.SIP.message import SIPMessage, SIPMessageType, SIPStatus
 from pyVoIP.VoIP.error import InvalidStateError
@@ -116,7 +116,7 @@ class VoIPCall:
             self.port = m
             self.assignedPorts[m] = self.ms[m]
 
-    def init_incoming_call(self, request: SIP.SIPMessage):
+    def init_incoming_call(self, request: SIPMessage):
         audio = []
         video = []
         for x in self.request.body["c"]:
@@ -214,7 +214,7 @@ class VoIPCall:
         codecs: Dict[int, RTP.PayloadType],
         ip: str,
         port: int,
-        request: SIP.SIPMessage,
+        request: SIPMessage,
         baseport: int,
     ) -> None:
         for ii in range(len(request.body["c"])):
@@ -260,7 +260,7 @@ class VoIPCall:
 
         return m
 
-    def renegotiate(self, request: SIP.SIPMessage) -> None:
+    def renegotiate(self, request: SIPMessage) -> None:
         m = self.gen_ms()
         message = self.sip.gen_answer(
             request, self.session_id, m, self.sendmode
@@ -373,7 +373,7 @@ class VoIPCall:
             return True
         return False
 
-    def rtp_answered(self, request: SIP.SIPMessage) -> None:
+    def rtp_answered(self, request: SIPMessage) -> None:
         for i in request.body["m"]:
             if i["type"] == "video":  # Disable Video
                 continue
@@ -406,7 +406,7 @@ class VoIPCall:
         self.request.headers["Contact"] = request.headers["Contact"]
         self.request.headers["To"]["tag"] = request.headers["To"]["tag"]
 
-    def answered(self, request: SIP.SIPMessage) -> None:
+    def answered(self, request: SIPMessage) -> None:
         if self.state == CallState.DIALING:
             self.rtp_answered(request)
         elif self.state != CallState.PROGRESS:
@@ -415,14 +415,14 @@ class VoIPCall:
         ack = self.phone.sip.gen_ack(request)
         self.conn.send(ack)
 
-    def progress(self, request: SIP.SIPMessage) -> None:
+    def progress(self, request: SIPMessage) -> None:
         if self.state != CallState.DIALING:
             return
         self.request = request
         self.rtp_answered(request)
         self.state = CallState.PROGRESS
 
-    def not_found(self, request: SIP.SIPMessage) -> None:
+    def not_found(self, request: SIPMessage) -> None:
         if self.state != CallState.DIALING:
             debug(
                 "TODO: 500 Error, received a not found response for a "
@@ -447,7 +447,7 @@ class VoIPCall:
         # also resets all other warnings.
         warnings.simplefilter("default")
 
-    def unavailable(self, request: SIP.SIPMessage) -> None:
+    def unavailable(self, request: SIPMessage) -> None:
         if self.state != CallState.DIALING:
             debug(
                 "TODO: 500 Error, received an unavailable response for a "
@@ -471,13 +471,13 @@ class VoIPCall:
         # also resets all other warnings.
         warnings.simplefilter("default")
 
-    def ringing(self, request: SIP.SIPMessage) -> None:
+    def ringing(self, request: SIPMessage) -> None:
         if self.state == CallState.RINGING:
             self.deny()
         else:
             self.request = request
 
-    def busy(self, request: SIP.SIPMessage) -> None:
+    def busy(self, request: SIPMessage) -> None:
         self.bye()
 
     def deny(self) -> None:
