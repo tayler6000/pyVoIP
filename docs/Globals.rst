@@ -1,10 +1,13 @@
+Globals
+#######
+
 Global Variables
-########
+****************
 
 There are a few global variables that may assist you if you're having problems with the library.
 
 pyVoIP.\ **DEBUG** = False
-    If set to true, pyVoIP will print debug messages that may be useful if you need to open a GitHub issue.  Otherwise, does nothing.
+    If set to true, pyVoIP will print debug messages that may be useful if you need to troubleshoot or open a GitHub issue.
 
 pyVoIP.\ **TRANSMIT_DELAY_REDUCTION** = 0.0
     The higher this variable is, the more often RTP packets are sent.  This *should* only ever need to be 0.0.  However, when testing on Windows, there has sometimes been jittering, setting this to 0.75 fixed this in testing, but you may need to tinker with this number on a per-system basis.
@@ -26,18 +29,20 @@ pyVoIP.\ **ALLOW_TLS_FALLBACK** = False
 pyVoIP.\ **TLS_CHECK_HOSTNAME** = True
     Is used to create SSLContexts. See `Python's documentation <https://docs.python.org/3/library/ssl.html#ssl.SSLContext.check_hostname>`_ on this feature.
 
-    You should use the set_tls_security to change this variable.
+    You should use the :ref:`set_tls_security <set_tls_security>` function to change this variable.
 
 pyVoIP.\ **TLS_VERIFY_MODE** = True
     Is used to create SSLContexts. See `Python's documentation <https://docs.python.org/3/library/ssl.html#ssl.SSLContext.verify_mode>`_ on this feature.
 
-    You should use the set_tls_security to change this variable.
+    You should use the :ref:`set_tls_security <set_tls_security>` function to change this variable.
 
-pyVoIP.\ **SIP_STATE_EB_LOCATION** = ":memory:"
+pyVoIP.\ **SIP_STATE_DB_LOCATION** = ":memory:"
     This variable allows you to save the SIP message state database to a file instead of storing it in memory which is the default.  This is useful for debugging, however pyVoIP does not delete the database afterwards which will cause an Exception upon restarting pyVoIP.  For this reason, we recommend you do not change this variable in production.
 
 Global Functions
-########
+****************
 
-pyVoIP.\  **set_tls_security**\ (verify_mode: `ssl.VerifyMode <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.VerifyMode>`) -> None
+.. _set_tls_security:
+
+pyVoIP.\  **set_tls_security**\ (verify_mode: `ssl.VerifyMode <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.VerifyMode>`_) -> None
     This method ensures that TLS_CHECK_HOSTNAME and TLS_VERIFY_MODE are set correctly depending on the TLS certificate verification settings you want to use.
