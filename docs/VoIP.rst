@@ -141,10 +141,12 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 VoIPPhoneParameter
 ==================
 
-*class* pyVoIP.VoIP.\ **VoIPPhoneParameter**\ (server: str, port: int, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: Optional[str] = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
-    The *server* argument is your PBX/VoIP server's IP, represented as a string.
+*class* pyVoIP.VoIP.\ **VoIPPhoneParameter**\ (server: str, port: int, user: str, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: Optional[str] = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
+    The *server* argument is your PBX/VoIP server's IP.
 
-    The *port* argument is your PBX/VoIP server's port, represented as an integer.
+    The *port* argument is your PBX/VoIP server's port.
+
+    The *user* argument is the user element of the URI. This MAY not be the username which is used for authentication.
 
     The *credentials_manager* argument is a :ref:`CredentialsManager` instance that stores all usernames and passwords your phone may need.
 
