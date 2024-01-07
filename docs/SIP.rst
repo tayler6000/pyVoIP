@@ -25,6 +25,7 @@ Enums
 
 pyVoIP.SIP.message.\ **SIPMessageType**
   SIPMessageType is an IntEnum with two members. It's stored in ``SIPMessage.type`` to effectively parse the message.
+
   SIPMessageType.\ **REQUEST**
     This SIPMessageType is used to signify the message was a SIP request.
     
