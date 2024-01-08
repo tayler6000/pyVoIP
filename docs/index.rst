@@ -29,5 +29,6 @@ In this documentation we will use the following terms:
    Examples
    Globals
    VoIP
+   Credentials
    SIP
    RTP
