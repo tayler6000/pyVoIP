@@ -24,7 +24,7 @@ Enums
 
 .. _callstate:
 
-*enum* pyVoIP.VoIP.\ **CallState**
+*enum* pyVoIP.VoIP.call.\ **CallState**
   CallState is an Enum with six attributes.
 
   CallState.\ **DIALING**
@@ -55,7 +55,7 @@ Enums
 
 .. _PhoneStatus:
 
-*enum* pyVoIP.VoIP.\ **PhoneStatus**
+*enum* pyVoIP.VoIP.status.\ **PhoneStatus**
   PhoneStatus is an Enum with five attributes.
 
   PhoneStatus.\ **INACTIVE**
@@ -83,7 +83,7 @@ VoIPCall
 
 The VoIPCall class is used to represent a single VoIP session, which may be to multiple :term:`clients<client>`.
 
-*class* pyVoIP.VoIP.\ **VoIPCall**\ (phone: :ref:`VoIPPhone`, callstate: :ref:`CallState <CallState>`, request: :ref:`SIPMessage`, session_id: int, bind_ip: str, conn: :ref:`VoIPConnection`, ms: Optional[Dict[int, :ref:`PayloadType<payload-type>`]] = None, sendmode="sendonly")
+*class* pyVoIP.VoIP.call.\ **VoIPCall**\ (phone: :ref:`VoIPPhone`, callstate: :ref:`CallState <CallState>`, request: :ref:`SIPMessage`, session_id: int, bind_ip: str, conn: :ref:`VoIPConnection`, ms: Optional[Dict[int, :ref:`PayloadType<payload-type>`]] = None, sendmode="sendonly")
       The *phone* argument is the initating instance of :ref:`VoIPPhone`.
 
       The *callstate* arguement is the initiating :ref:`CallState<callstate>`.
@@ -141,7 +141,7 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 VoIPPhoneParameter
 ==================
 
-*class* pyVoIP.VoIP.\ **VoIPPhoneParameter**\ (server: str, port: int, user: str, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode<TransportMode>`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
+*class* pyVoIP.VoIP.phone.\ **VoIPPhoneParameter**\ (server: str, port: int, user: str, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode<TransportMode>`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
     The *server* argument is your PBX/VoIP server's IP.
 
     The *port* argument is your PBX/VoIP server's port.
@@ -177,7 +177,7 @@ VoIPPhone
 
 The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref:`VoIPCall`'s when there is an incoming call or a :term:`user` makes a call. It then uses the VoIPCall class to handle the call's states.
 
-*class* pyVoIP.VoIP.\ **VoIPPhone**\ (voip_phone_parameter: :ref:`VoIPPhoneParameter`)
+*class* pyVoIP.VoIP.phone.\ **VoIPPhone**\ (voip_phone_parameter: :ref:`VoIPPhoneParameter`)
   **get_status**\ () -> :ref:`PhoneStatus <PhoneStatus>`
     This method returns the phone's current status.
     
