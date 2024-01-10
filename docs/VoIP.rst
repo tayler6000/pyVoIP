@@ -83,7 +83,7 @@ VoIPCall
 
 The VoIPCall class is used to represent a single VoIP session, which may be to multiple :term:`clients<client>`.
 
-*class* pyVoIP.VoIP.\ **VoIPCall**\ (phone: :ref:`VoIPPhone`, callstate: :ref:`CallState <CallState>`, request: :ref:`SIPMessage`, session_id: int, bind_ip: str, conn: :ref:`VoIPConnection`, ms: Optional[Dict[int, RTP.PayloadType]] = None, sendmode="sendonly")
+*class* pyVoIP.VoIP.\ **VoIPCall**\ (phone: :ref:`VoIPPhone`, callstate: :ref:`CallState <CallState>`, request: :ref:`SIPMessage`, session_id: int, bind_ip: str, conn: :ref:`VoIPConnection`, ms: Optional[Dict[int, :ref:`PayloadType<payload-type>`]] = None, sendmode="sendonly")
       The *phone* argument is the initating instance of :ref:`VoIPPhone`.
 
       The *callstate* arguement is the initiating :ref:`CallState<callstate>`.
@@ -92,13 +92,13 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 
       The *session_id* argument is a unique code used to identify the session with `SDP <https://tools.ietf.org/html/rfc4566#section-5.2>`_ when answering the call.
 
-      The *bind_ip* argument is the IP address it will pass to :ref:`RTPClient`'s to bind to.
+      The *bind_ip* argument is the IP address that pyVoIP will bind its sockets to.
 
       The *ms* arguement is a dictionary with int as the key and a :ref:`PayloadType<payload-type>` as the value. This is only used when originating the call.
 
 
     **get_dtmf**\ (length=1) -> str
-      This method can be called get the next pressed DTMF key. DTMF's are stored in an `io.StringIO <https://docs.python.org/3/library/io.html?highlight=stringio#io.StringIO>`_ which is a buffer. Calling this method when there a key has not been pressed returns an empty string. To return the entire contents of the buffer set length to a negative number or None. If the :term:`client` presses the numbers 1-9-5 you'll have the following output:
+      This method can be called get the next pressed DTMF key. DTMF's are stored in an `StringIO <https://docs.python.org/3/library/io.html?highlight=stringio#io.StringIO>`_ which is a buffer. Calling this method when there a key has not been pressed returns an empty string. To return the entire contents of the buffer set length to a negative number or None. If the :term:`client` presses the numbers 1-9-5 you'll have the following output:
   
       .. code-block:: python
   
@@ -141,7 +141,7 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 VoIPPhoneParameter
 ==================
 
-*class* pyVoIP.VoIP.\ **VoIPPhoneParameter**\ (server: str, port: int, user: str, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: Optional[str] = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
+*class* pyVoIP.VoIP.\ **VoIPPhoneParameter**\ (server: str, port: int, user: str, credentials_manager: Optional[:ref:`CredentialsManager`],  bind_ip="0.0.0.0", bind_port=5060, bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, transport_mode=\ :ref:`TransportMode<TransportMode>`.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None, rtp_port_low=10000, rtp_port_high=20000, call_class: Type[VoIPCall] = None, sip_class: Type[SIP.SIPClient] = None)
     The *server* argument is your PBX/VoIP server's IP.
 
     The *port* argument is your PBX/VoIP server's port.
@@ -158,11 +158,11 @@ VoIPPhoneParameter
 
     The *hostname* argument is used to generate SIP requests and responses with devices within pyVoIP's *bind_network*. If left as None, the *bind_ip* will be used instead.
 
-    The *remote_hostname* argument is used to generate SIP requests and responses with devices outside of pyVoIP's *bind_network*. If left as None, pyVoIP will throw a :ref:`NATError` if a request is sent outside of pyVoIP's *bind_network*.
+    The *remote_hostname* argument is used to generate SIP requests and responses with devices outside of pyVoIP's *bind_network*. If left as None, pyVoIP will throw a :ref:`NATError<NATError>` if a request is sent outside of pyVoIP's *bind_network*.
 
-    The *transport_mode* argument determines whether pyVoIP will use UDP, TCP, or TLS. Value should be a :ref:`TransportMode`.
+    The *transport_mode* argument determines whether pyVoIP will use UDP, TCP, or TLS. Value should be a :ref:`TransportMode<TransportMode>`.
 
-    The *cert_file*, *key_file*, and *key_password* arguments are used to load certificates in pyVoIP's server context if using TLS for the transport mode. See `Python's documentation on load_cert_chain <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.SSLContext.load_cert_chain>`_ for more details.
+    The *cert_file*, *key_file*, and *key_password* arguments are used to load certificates in pyVoIP's server context if using TLS for the transport mode. See Python's documentation on `load_cert_chain <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.SSLContext.load_cert_chain>`_ for more details.
 
     The *rtp_port_low* and *rtp_port_high* arguments are used to generate random ports to use for audio transfer. Per RFC 4566 Sections `5.7 <https://tools.ietf.org/html/rfc4566#section-5.7>`_ and `5.14 <https://tools.ietf.org/html/rfc4566#section-5.14>`_, it can take multiple ports to fully communicate with other :term:`clients<client>`, as such a large range is recommended. If an invalid range is given, a :ref:`InvalidStateError<invalidstateerror>` will be thrown.
 
@@ -187,7 +187,7 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
   **stop**\ () -> None
     This method ends all ongoing calls, then stops the :ref:`SIPClient` class
   
-  **call**\ (number: str, payload_types: Optional[List[:ref:`PayloadType`]] = None) -> :ref:`VoIPCall`
+  **call**\ (number: str, payload_types: Optional[List[:ref:`PayloadType<payload-type>`]] = None) -> :ref:`VoIPCall`
     Originates a call using the specified *payload_types*, or PCMU and telephone-event by default. The *number* argument must be a string. 
 
     Returns a :ref:`VoIPCall` class in CallState.DIALING.

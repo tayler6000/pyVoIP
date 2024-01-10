@@ -3,7 +3,7 @@ Credentials
 
 Since SIP requests can traverse multiple servers and can receive multiple challenges, the Credentials Manager was made to store multiple passwords and pyVoIP will use the appropriate password upon request.
 
-Per `RFC 3261 Section 22.1 <https://www.rfc-editor.org/rfc/rfc3261.html#section-22.1>`_, SIP uses authentication similar to HTTP authentication (`RFC 2617 <https://www.rfc-editor.org/rfc/rfc2617>`_), with the main difference being ``The realm string alone defines the protection domain.``. However, some services always use the same domain. For example, if you need to authenticate with two seperate Asterisk servers, the realm will almost certainly be ``asterisk`` for both, despite being otherwise unrelated servers. For that reason, the Credentials Manager also supports server filtering.
+Per `RFC 3261 Section 22.1 <https://www.rfc-editor.org/rfc/rfc3261.html#section-22.1>`_, SIP uses authentication similar to HTTP authentication (:RFC:`2617`), with the main difference being ``The realm string alone defines the protection domain.``. However, some services always use the same domain. For example, if you need to authenticate with two seperate Asterisk servers, the realm will almost certainly be ``asterisk`` for both, despite being otherwise unrelated servers. For that reason, the Credentials Manager also supports server filtering.
 
 .. _CredentialsManager:
 

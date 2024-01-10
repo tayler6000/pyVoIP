@@ -18,10 +18,10 @@ There are two errors under ``pyVoIP.SIP.error``.
 *exception* pyVoIP.SIP.\ **SIPParseError**
   This is thrown when :ref:`SIPMessage` is unable to parse a SIP message/request.
 
-.. _Enums:
-
 Enums
 ******
+
+.. _SIPMessageType:
 
 pyVoIP.SIP.message.\ **SIPMessageType**
   SIPMessageType is an IntEnum with two members. It's stored in ``SIPMessage.type`` to effectively parse the message.
@@ -32,6 +32,8 @@ pyVoIP.SIP.message.\ **SIPMessageType**
   SIPMessageType.\ **RESPONSE**
     This SIPMessageType is used to signify the message was a SIP response.
     
+.. _SIPStatus:
+
 pyVoIP.SIP.message.\ **SIPStatus**
   SIPStatus is used for :ref:`SIPMessage`'s with SIPMessageType.RESPONSE. They will not all be listed here, but a complete list can be found on `Wikipedia <https://en.wikipedia.org/wiki/List_of_SIP_response_codes>`_. SIPStatus has the following attributes:
     status.\ **value**
@@ -66,7 +68,7 @@ SIPClient
 
 The SIPClient class is used to communicate with the PBX/VoIP server. It is responsible for registering with the server, and receiving phone calls.
 
-*class* pyVoIP.SIP.client.\ **SIPClient**\ (server: str, port: int, user: str, credentials_manager: :ref:`CredentialsManager`, bind_ip="0.0.0.0", bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, bind_port=5060, call_callback: Optional[Callable[[:ref:`VoIPConnection`, :ref:`SIPMessage`], Optional[str]]] = None, fatal_callback: Optional[Callable[..., None]] = None, transport_mode: :ref:`TransportMode` = TransportMode.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD` = None)
+*class* pyVoIP.SIP.client.\ **SIPClient**\ (server: str, port: int, user: str, credentials_manager: :ref:`CredentialsManager`, bind_ip="0.0.0.0", bind_network="0.0.0.0/0", hostname: Optional[str] = None, remote_hostname: Optional[str] = None, bind_port=5060, call_callback: Optional[Callable[[:ref:`VoIPConnection`, :ref:`SIPMessage`], Optional[str]]] = None, fatal_callback: Optional[Callable[..., None]] = None, transport_mode: :ref:`TransportMode<TransportMode>` = TransportMode.UDP, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None)
     The *server* argument is your PBX/VoIP server's IP.
 
     The *port* argument is your PBX/VoIP server's port.
@@ -81,7 +83,7 @@ The SIPClient class is used to communicate with the PBX/VoIP server. It is respo
 
     The *hostname* argument is used to generate SIP requests and responses with devices within pyVoIP's *bind_network*. If left as None, the *bind_ip* will be used instead.
 
-    The *remote_hostname* argument is used to generate SIP requests and responses with devices outside of pyVoIP's *bind_network*. If left as None, pyVoIP will throw a :ref:`NATError` if a request is sent outside of pyVoIP's *bind_network*.
+    The *remote_hostname* argument is used to generate SIP requests and responses with devices outside of pyVoIP's *bind_network*. If left as None, pyVoIP will throw a :ref:`NATError<NATError>` if a request is sent outside of pyVoIP's *bind_network*.
 
     The *bind_port* argument is the port SIP will bind to to receive SIP requests. The default for this protocol is port 5060, but any port can be used.
 
@@ -89,9 +91,9 @@ The SIPClient class is used to communicate with the PBX/VoIP server. It is respo
 
     The *fatal_callback* argument is a function that tells the :ref:`VoIPPhone` instance there was a fatal error, e.g., failed to register.
 
-    The *transport_mode* argument determines whether pyVoIP will use UDP, TCP, or TLS. Value should be a :ref:`TransportMode`.
+    The *transport_mode* argument determines whether pyVoIP will use UDP, TCP, or TLS. Value should be a :ref:`TransportMode<TransportMode>`.
 
-    The *cert_file*, *key_file*, and *key_password* arguments are used to load certificates in pyVoIP's server context if using TLS for the transport mode. See `Python's documentation on load_cert_chain <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.SSLContext.load_cert_chain>`_ for more details.
+    The *cert_file*, *key_file*, and *key_password* arguments are used to load certificates in pyVoIP's server context if using TLS for the transport mode. See Python's documentation on `load_cert_chain <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.SSLContext.load_cert_chain>`_ for more details.
 
   **start**\ () -> None
     This method starts the SIPClient and registers with the PBX/VoIP server. It is called automatically when :ref:`VoIPPhone` starts.
@@ -102,14 +104,14 @@ The SIPClient class is used to communicate with the PBX/VoIP server. It is respo
   **send**\ (request: str) -> :ref:`VoIPConnection`
     This method starts a new SIP dialog and sends the request using the request to determine its destination.  Returns the VoIPConnection to continue the dialog.
     
-  **invite**\ (number: str, ms: dict[int, dict[str, RTP.\ :ref:`PayloadType<payload-type>`]], sendtype: RTP.\ :ref:`TransmitType`)
+  **invite**\ (number: str, ms: dict[int, dict[str, :ref:`PayloadType<payload-type>`]], sendtype: :ref:`TransmitType<TransmitType>`)
     This method generates a SIP INVITE request. This method is called by :ref:`VoIPPhone`.call().
 
     The *number* argument must be the number being called as a string.
 
     The *ms* argument is a dictionary of the media types to be used. Currently only PCMU and telephone-event is supported.
 
-    The *sendtype* argument must be an instance of :ref:`TransmitType`.
+    The *sendtype* argument must be an instance of :ref:`TransmitType<TransmitType>`.
     
   **bye**\ (request: :ref:`SIPMessage`) -> None
     This method is called by :ref:`VoIPCall`.hangup(). It generates a BYE request, and then transmits the generated request. **This should not be called by the** :term:`user`.
@@ -136,10 +138,10 @@ The SIPMessage class is used to parse SIP requests and responses and makes them 
       This attribute is the first line of the SIP message as a string. It contains the SIP Version, and the method/response code.
       
     SIPMessage.\ **type**
-      This attribute will be a :ref:`SIPMessageType<enums>`.
+      This attribute will be a :ref:`SIPMessageType<SIPMessageType>`.
       
     SIPMessage.\ **status**
-      This attribute will be a :ref:`SIPStatus<enums>`. It will be set to ``int(0)`` if the message is a request.
+      This attribute will be a :ref:`SIPStatus<SIPStatus>`. It will be set to ``int(0)`` if the message is a request.
       
     SIPMessage.\ **method**
       This attribute will be a string representation of the method. It will be set to None if the message is a response.

@@ -32,3 +32,5 @@ In this documentation we will use the following terms:
    Credentials
    SIP
    RTP
+   Networking
+   Types
