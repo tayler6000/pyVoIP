@@ -42,7 +42,6 @@ import pytest
             "10.1.0.1",
             "example.com",
         ),
-
         # Test Remote Host with Bind 0.0.0.0
         (
             {
@@ -74,7 +73,6 @@ import pytest
             "10.1.0.1",
             "example.com",
         ),
-
         # Test Local Host
         (
             {
@@ -100,7 +98,6 @@ import pytest
             "10.1.1.1",
             "10.0.0.4",
         ),
-
         # Test Local Host with Bind 0.0.0.0
         (
             {
