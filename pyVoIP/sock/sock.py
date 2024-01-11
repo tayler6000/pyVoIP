@@ -11,6 +11,7 @@ import pyVoIP
 import socket
 import sqlite3
 import ssl
+import sys
 import threading
 import time
 
@@ -182,11 +183,18 @@ class VoIPSocket(threading.Thread):
                 )
             self.s = self.server_context.wrap_socket(self.s, server_side=True)
 
-        self.buffer = sqlite3.connect(
-            pyVoIP.SIP_STATE_DB_LOCATION,
-            isolation_level=None,
-            check_same_thread=False,
-        )
+        if sys.version_info.major == 3 and sys.version_info.minor >= 12:
+            self.buffer = sqlite3.connect(
+                pyVoIP.SIP_STATE_DB_LOCATION,
+                check_same_thread=False,
+                autocommit=True,
+            )
+        else:
+            self.buffer = sqlite3.connect(
+                pyVoIP.SIP_STATE_DB_LOCATION,
+                isolation_level=None,
+                check_same_thread=False,
+            )
         """
         RFC 3261 Section 12, Paragraph 2 states:
         "A dialog is identified at each UA with a dialog ID, which consists
