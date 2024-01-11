@@ -1,7 +1,7 @@
 # pyVoIP
-PyVoIP is a pure python VoIP/SIP/RTP library.  Currently, it supports PCMA, PCMU, and telephone-event.
+PyVoIP is a pure python VoIP/SIP/RTP library. Currently, it supports PCMA, PCMU, and telephone-event.
 
-This library does not depend on a sound library, i.e. you can use any sound library that can handle linear sound data i.e. pyaudio or even wave.  Keep in mind PCMU/PCMA only supports 8000Hz, 1 channel, 8 bit audio.
+This library does not depend on a sound library, i.e. you can use any sound library that can handle linear sound data such as pyaudio or even wave. Keep in mind PCMU/PCMA only supports 8000Hz, 1 channel, 8 bit audio.
 
 ## Getting Started
 Simply run `pip install pyVoIP`, or if installing from source:
@@ -18,20 +18,28 @@ Don't forget to check out [the documentation](https://pyvoip.readthedocs.io/)!
 This basic code will simple make a phone that will automatically answer then hang up.
 
 ```python
-from pyVoIP.VoIP import VoIPPhone, InvalidStateError
+from pyVoIP.credentials import CredentialsManager
+from pyVoIP.VoIP.call import VoIPCall
+from pyVoIP.VoIP.error import InvalidStateError
+from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
 
-def answer(call): # This will be your callback function for when you receive a phone call.
-    try:
-      call.answer()
-      call.hangup()
-    except InvalidStateError:
-      pass
-  
+class Call(VoIPCall):
+
+  def ringing(self, invite_request):
+      try:
+          self.answer()
+          self.hangup()
+      except InvalidStateError:
+          pass
+
 if __name__ == "__main__":
-    phone=VoIPPhone(<SIP Server IP>, <SIP Server Port>, <SIP Server Username>, <SIP Server Password>, callCallback=answer, myIP=<Your computer's local IP>, sipPort=<Port to use for SIP (int, default 5060)>, rtpPortLow=<low end of the RTP Port Range>, rtpPortHigh=<high end of the RTP Port Range>)
-    phone.start()
-    input('Press enter to disable the phone')
-    phone.stop()
+  cm = CredentialsManager()
+  cm.add(<SIP server username>, <SIP server password>)
+  params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
+  phone = VoIPPhone(params)
+  phone.start()
+  input('Press enter to disable the phone')
+  phone.stop()
 ```
 
 ### Sponsors
