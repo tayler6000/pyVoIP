@@ -31,7 +31,7 @@ The following will create a phone that answers and automatically hangs up:
   if __name__ == "__main__":
       cm = CredentialsManager()
       cm.add(<SIP server username>, <SIP server password>)
-      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
+      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
       phone = VoIPPhone(params)
       phone.start()
       input('Press enter to disable the phone')
