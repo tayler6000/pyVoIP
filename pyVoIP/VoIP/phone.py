@@ -1,7 +1,7 @@
 from pyVoIP import RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.SIP.client import SIPClient
-from pyVoIP.SIP.message import SIPMessage, SIPStatus
+from pyVoIP.SIP.message import SIPMessage, SIPMessageType, SIPStatus
 from pyVoIP.sock.sock import VoIPConnection
 from pyVoIP.sock.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
@@ -105,7 +105,7 @@ class VoIPPhone:
         self, conn: VoIPConnection, request: SIPMessage
     ) -> Optional[str]:
         # debug("Callback: "+request.summary())
-        if request.type == pyVoIP.SIPMessageType.REQUEST:
+        if request.type == SIPMessageType.REQUEST:
             # debug("This is a message")
             if request.method == "INVITE":
                 self._callback_MSG_Invite(conn, request)

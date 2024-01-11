@@ -2,7 +2,7 @@ import ssl
 
 __all__ = ["SIP", "RTP", "VoIP"]
 
-version_info = (2, 0, "0a1")
+version_info = (2, 0, "0a3")
 
 __version__ = ".".join([str(x) for x in version_info])
 
