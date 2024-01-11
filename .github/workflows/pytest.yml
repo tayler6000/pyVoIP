@@ -1,7 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
-name: Check pytest
+name: Run pytest
 
 on:
   push:
@@ -11,12 +8,11 @@ on:
   pull_request:
 
 jobs:
-  check-pytest:
+  run-pytest:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version:
-          - "3.8"
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v3.5.2
