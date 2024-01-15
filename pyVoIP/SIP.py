@@ -347,6 +347,7 @@ class SIPMessage:
         self.headers: Dict[str, Any] = {"Via": []}
         self.body: Dict[str, Any] = {}
         self.authentication: Dict[str, str] = {}
+        self.proxy_authentication: Dict[str, str] = {}
         self.raw = data
         self.auth_match = re.compile(r'(\w+)=("[^",]+"|[^ \t,]+)')
         self.parse(data)
@@ -460,14 +461,21 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization":
+        elif (
+            header == "WWW-Authenticate"
+            or header == "Authorization"
+            or header == "Proxy-Authenticate"
+        ):
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
             for var, data in row_data:
                 header_data[var] = data.strip('"')
             self.headers[header] = header_data
-            self.authentication = header_data
+            if header == "Proxy-Authenticate":
+                self.proxy_authentication = header_data
+            else:
+                self.authentication = header_data
         else:
             self.headers[header] = data
 
@@ -813,12 +821,14 @@ class SIPClient:
         myPort=5060,
         callCallback: Optional[Callable[[SIPMessage], None]] = None,
         fatalCallback: Optional[Callable[..., None]] = None,
+        auth_username: Optional[str] = None,
     ):
         self.NSD = False
         self.server = server
         self.port = port
         self.myIP = myIP
         self.username = username
+        self.auth_username = auth_username
         self.password = password
 
         self.phone = phone
@@ -1074,8 +1084,16 @@ class SIPClient:
         return self.gen_authorization(request)
 
     def gen_authorization(self, request: SIPMessage) -> bytes:
-        realm = request.authentication["realm"]
-        HA1 = self.username + ":" + realm + ":" + self.password
+        if request.status == SIPStatus(407):
+            nonce = request.proxy_authentication["nonce"]
+            realm = request.proxy_authentication["realm"]
+            user = self.auth_username
+        else:
+            nonce = request.authentication["nonce"]
+            realm = request.authentication["realm"]
+            user = self.username
+
+        HA1 = user + ":" + realm + ":" + self.password
         HA1 = hashlib.md5(HA1.encode("utf8")).hexdigest()
         HA2 = (
             ""
@@ -1085,7 +1103,6 @@ class SIPClient:
             + ";transport=UDP"
         )
         HA2 = hashlib.md5(HA2.encode("utf8")).hexdigest()
-        nonce = request.authentication["nonce"]
         response = (HA1 + ":" + nonce + ":" + HA2).encode("utf8")
         response = hashlib.md5(response).hexdigest().encode("utf8")
 
@@ -1216,8 +1233,14 @@ class SIPClient:
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
         response = str(self.genAuthorization(request), "utf8")
-        nonce = request.authentication["nonce"]
-        realm = request.authentication["realm"]
+        if request.status == SIPStatus(407):
+            nonce = request.proxy_authentication["nonce"]
+            realm = request.proxy_authentication["realm"]
+            user = self.auth_username
+        else:
+            nonce = request.authentication["nonce"]
+            realm = request.authentication["realm"]
+            user = self.username
 
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
@@ -1250,8 +1273,10 @@ class SIPClient:
             "Expires: "
             + f"{self.default_expires if not deregister else 0}\r\n"
         )
+        if request.status == SIPStatus(407):
+            regRequest += "Proxy-"
         regRequest += (
-            f'Authorization: Digest username="{self.username}",'
+            f'Authorization: Digest username="{user}",'
             + f'realm="{realm}",nonce="{nonce}",'
             + f'uri="sip:{self.server};transport=UDP",'
             + f'response="{response}",algorithm=MD5\r\n'
@@ -1609,6 +1634,7 @@ class SIPClient:
 
             while (
                 response.status != SIPStatus(401)
+                and response.status != SIPStatus(407)
                 and response.status != SIPStatus(100)
                 and response.status != SIPStatus(180)
             ) or response.headers["Call-ID"] != call_id:
@@ -1626,10 +1652,19 @@ class SIPClient:
             self.out.sendto(ack.encode("utf8"), (self.server, self.port))
             debug("Acknowledged")
             authhash = self.genAuthorization(response)
-            nonce = response.authentication["nonce"]
-            realm = response.authentication["realm"]
-            auth = (
-                f'Authorization: Digest username="{self.username}",realm='
+
+            auth = ""
+            if response.status == SIPStatus(407):
+                nonce = response.proxy_authentication["nonce"]
+                realm = response.proxy_authentication["realm"]
+                user = self.auth_username
+                auth += "Proxy-"
+            else:
+                nonce = response.authentication["nonce"]
+                realm = response.authentication["realm"]
+                user = self.username
+            auth += (
+                f'Authorization: Digest username="{user}",realm='
                 + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
                 + f'transport=UDP",response="{str(authhash, "utf8")}",'
                 + "algorithm=MD5\r\n"
@@ -1689,8 +1724,11 @@ class SIPClient:
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
 
-        if response.status == SIPStatus(401):
-            # Unauthorized, likely due to being password protected.
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
+            # 401 Unauthorized, likely due to being password protected.
+            # 407 Proxy Authentication Required
             regRequest = self.genRegister(response, deregister=True)
             self.out.sendto(
                 regRequest.encode("utf8"), (self.server, self.port)
@@ -1699,7 +1737,9 @@ class SIPClient:
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
-                if response.status == SIPStatus(401):
+                if response.status == SIPStatus(
+                    401
+                ) or response.status == SIPStatus(407):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
@@ -1793,7 +1833,9 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response)
             self.out.sendto(
@@ -1804,7 +1846,9 @@ class SIPClient:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
                 response = self.trying_timeout_check(response)
-                if response.status == SIPStatus(401):
+                if response.status == SIPStatus(
+                    401
+                ) or response.status == SIPStatus(407):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("=" * 50)
@@ -1832,11 +1876,6 @@ class SIPClient:
                     self._handle_bad_request()
             else:
                 raise TimeoutError("Registering on SIP Server timed out")
-
-        if response.status == SIPStatus(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
 
         # TODO: This must be done more reliable
         if response.status not in [
