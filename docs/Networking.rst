@@ -25,7 +25,7 @@ pyVoIP.networking.nat.\ **AddressType**
 
 .. _TransportMode:
 
-pyVoIP.sock.transport.\ **TransportMode**
+pyVoIP.networking.transport.\ **TransportMode**
   TransportMode is used by pyVoIP to determine what communication protocol to use. TransportMode has the following properties:
 
     TransportMode.\ **value**
@@ -80,7 +80,7 @@ VoIPSocket
 
 The VoIPSocket class is the phone's main SIP socket. It receives and processes all new dialogs, and all messages if using :ref:`TransportMode<TransportMode>`.UDP.
 
-*class* pyVoIP.sock.sock.\ **VoIPSocket**\ (mode: :ref:`TransportMode<TransportMode>`, bind_ip: str, bind_port: int, sip: :ref:`SIPClient`, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None)
+*class* pyVoIP.networking.sock.\ **VoIPSocket**\ (mode: :ref:`TransportMode<TransportMode>`, bind_ip: str, bind_port: int, sip: :ref:`SIPClient`, cert_file: Optional[str] = None, key_file: Optional[str] = None, key_password: :ref:`KEY_PASSWORD<KEY_PASSWORD>` = None)
     The *TransportMode* argument is used to determine what communication protocol to use.
 
     The *bind_ip* argument is the IP address that pyVoIP will bind its sockets to.
@@ -104,7 +104,7 @@ VoIPConnection
 
 The VoIPConnecion class is a wrapper for Python's sockets. Since UDP, TCP, and TLS sockets all have different quarks in Python, this class consolidates everything into one interface. For UDP, VoIPConnection will pull messages from :ref:`VoIPSocket`'s database.
 
-*class* pyVoIP.sock.sock.\ **VoIPConnection**\ (voip_sock: :ref:`VoIPSocket`, conn: Optional[:ref:`SOCKETS<SOCKETS>`, message: :ref:`SIPMessage`)
+*class* pyVoIP.networking.sock.\ **VoIPConnection**\ (voip_sock: :ref:`VoIPSocket`, conn: Optional[:ref:`SOCKETS<SOCKETS>`, message: :ref:`SIPMessage`)
     The *voiop_socket* argument is a :ref:`VoIPSocket` instance reference.
 
     The *conn* argument is the underlying Python socket.

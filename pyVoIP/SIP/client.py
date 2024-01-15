@@ -4,6 +4,8 @@ from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.helpers import Counter
 from pyVoIP.networking.nat import NAT, AddressType
+from pyVoIP.networking.sock import VoIPSocket
+from pyVoIP.networking.transport import TransportMode
 from pyVoIP.SIP.error import (
     SIPParseError,
     InvalidAccountInfoError,
@@ -14,7 +16,6 @@ from pyVoIP.SIP.message import (
     SIPStatus,
     SIPMessageType,
 )
-from pyVoIP.sock.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
 from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
@@ -26,8 +27,8 @@ import uuid
 
 if TYPE_CHECKING:
     from pyVoIP import RTP
-    from pyVoIP.sock import VoIPConnection
-    from pyVoIP.VoIP import VoIPPhone
+    from pyVoIP.networking.sock import VoIPConnection
+    from pyVoIP.VoIP.phone import VoIPPhone
 
 
 debug = pyVoIP.debug
@@ -204,7 +205,6 @@ class SIPClient:
     def start(self) -> None:
         if self.NSD:
             raise RuntimeError("Attempted to start already started SIPClient")
-        from pyVoIP.sock.sock import VoIPSocket
 
         self.NSD = True
         self.s = VoIPSocket(
