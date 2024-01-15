@@ -461,7 +461,11 @@ class SIPMessage:
             self.headers[header] = data.split(", ")
         elif header == "Content-Length":
             self.headers[header] = int(data)
-        elif header == "WWW-Authenticate" or header == "Authorization"  or header == "Proxy-Authenticate":
+        elif (
+            header == "WWW-Authenticate"
+            or header == "Authorization"
+            or header == "Proxy-Authenticate"
+        ):
             data = data.replace("Digest ", "")
             row_data = self.auth_match.findall(data)
             header_data = {}
@@ -1733,10 +1737,10 @@ class SIPClient:
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
-                if response.status == SIPStatus(401) or response.status == SIPStatus(
-                    407
-                ):
-                     # At this point, it's reasonable to assume that
+                if response.status == SIPStatus(
+                    401
+                ) or response.status == SIPStatus(407):
+                    # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
                     raise InvalidAccountInfoError(
@@ -1842,9 +1846,9 @@ class SIPClient:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
                 response = self.trying_timeout_check(response)
-                if response.status == SIPStatus(401) or response.status == SIPStatus(
-                    407
-                ):
+                if response.status == SIPStatus(
+                    401
+                ) or response.status == SIPStatus(407):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("=" * 50)
