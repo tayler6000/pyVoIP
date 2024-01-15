@@ -1720,7 +1720,9 @@ class SIPClient:
         response = SIPMessage(resp)
         response = self.trying_timeout_check(response)
 
-        if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # 401 Unauthorized, likely due to being password protected.
             # 407 Proxy Authentication Required
             regRequest = self.genRegister(response, deregister=True)
@@ -1731,8 +1733,10 @@ class SIPClient:
             if ready[0]:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
-                if response.status == SIPStatus(401) or response.status == SIPStatus(407):
-                    # At this point, it's reasonable to assume that
+                if response.status == SIPStatus(401) or response.status == SIPStatus(
+                    407
+                ):
+                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("Unauthorized")
                     raise InvalidAccountInfoError(
@@ -1825,7 +1829,9 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # Unauthorized, likely due to being password protected.
             regRequest = self.genRegister(response)
             self.out.sendto(
@@ -1836,7 +1842,9 @@ class SIPClient:
                 resp = self.s.recv(8192)
                 response = SIPMessage(resp)
                 response = self.trying_timeout_check(response)
-                if response.status == SIPStatus(401) or response.status == SIPStatus(407):
+                if response.status == SIPStatus(401) or response.status == SIPStatus(
+                    407
+                ):
                     # At this point, it's reasonable to assume that
                     # this is caused by invalid credentials.
                     debug("=" * 50)
