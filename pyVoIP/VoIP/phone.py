@@ -2,8 +2,8 @@ from pyVoIP import RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.SIP.client import SIPClient
 from pyVoIP.SIP.message import SIPMessage, SIPMessageType, SIPStatus
-from pyVoIP.sock.sock import VoIPConnection
-from pyVoIP.sock.transport import TransportMode
+from pyVoIP.networking.sock import VoIPConnection
+from pyVoIP.networking.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
 from pyVoIP.VoIP.call import CallState, VoIPCall
 from pyVoIP.VoIP.error import (

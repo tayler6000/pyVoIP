@@ -3,7 +3,7 @@ from pyVoIP.types import KEY_PASSWORD, SOCKETS
 from pyVoIP.SIP.message import SIPMessage, SIPMessageType
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.networking.nat import NAT, AddressType
-from pyVoIP.sock.transport import TransportMode
+from pyVoIP.networking.transport import TransportMode
 import json
 import math
 import pprint

@@ -22,7 +22,7 @@ debug = pyVoIP.debug
 
 if TYPE_CHECKING:
     from pyVoIP.VoIP.phone import VoIPPhone
-    from pyVoIP.sock.sock import VoIPConnection
+    from pyVoIP.networking.sock import VoIPConnection
 
 
 class CallState(Enum):
