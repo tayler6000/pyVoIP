@@ -1191,7 +1191,9 @@ class SIPClient:
             ),
         )
         response = SIPMessage(conn.recv(8192))
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             #  Requires password
             auth = self.gen_authorization(response)
             message = message.replace(
@@ -1237,7 +1239,9 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response, deregister=True)
             conn = self.send(password_request)
@@ -1265,7 +1269,9 @@ class SIPClient:
         elif response.status == SIPStatus.OK:
             return True
 
-        elif response.status == SIPStatus(401):
+        elif response.status == SIPStatus(401) or response.statis == SIPStatus(
+            407
+        ):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
             debug("=" * 50)
@@ -1338,7 +1344,9 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401):
+        if response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response)
             conn = self.send(password_request)
@@ -1364,7 +1372,9 @@ class SIPClient:
         elif response.status == SIPStatus.OK:
             return True
 
-        elif response.status == SIPStatus(401):
+        elif response.status == SIPStatus(401) or response.status == SIPStatus(
+            407
+        ):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
             debug("=" * 50)
