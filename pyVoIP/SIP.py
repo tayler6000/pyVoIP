@@ -1049,7 +1049,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         response += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.gen_tag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
@@ -1278,7 +1279,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         response += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.gen_tag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
@@ -1311,7 +1313,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         okResponse += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.gen_tag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
         okResponse += (
@@ -1560,7 +1563,8 @@ class SIPClient:
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
         ackMessage += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.gen_tag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         ackMessage += f"From: {request.headers['From']['raw']};tag={tag}\r\n"
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
