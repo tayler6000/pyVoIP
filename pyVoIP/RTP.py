@@ -371,7 +371,7 @@ class RTPClient:
         while self.NSD:
             try:
                 packet = self.sin.recv(8192)
-                self.parsePacket(packet)
+                self.parse_packet(packet)
             except BlockingIOError:
                 time.sleep(0.01)
             except RTPParseError as e:
@@ -383,7 +383,7 @@ class RTPClient:
         while self.NSD:
             last_sent = time.monotonic_ns()
             payload = self.pmout.read()
-            payload = self.encodePacket(payload)
+            payload = self.encode_packet(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
             packet += chr(int(self.preference)).encode("utf8")
             try:
@@ -435,11 +435,11 @@ class RTPClient:
     def parse_packet(self, packet: bytes) -> None:
         msg = RTPMessage(packet, self.assoc)
         if msg.payload_type == PayloadType.PCMU:
-            self.parsePCMU(msg)
+            self.parse_pcmu(msg)
         elif msg.payload_type == PayloadType.PCMA:
-            self.parsePCMA(msg)
+            self.parse_pcma(msg)
         elif msg.payload_type == PayloadType.EVENT:
-            self.parseTelephoneEvent(msg)
+            self.parse_telephone_event(msg)
         else:
             raise RTPParseError(
                 "Unsupported codec (parse): " + str(msg.payload_type)
@@ -456,9 +456,9 @@ class RTPClient:
 
     def encode_packet(self, payload: bytes) -> bytes:
         if self.preference == PayloadType.PCMU:
-            return self.encodePCMU(payload)
+            return self.encode_pcmu(payload)
         elif self.preference == PayloadType.PCMA:
-            return self.encodePCMA(payload)
+            return self.encode_pcmu(payload)
         else:
             raise RTPParseError(
                 "Unsupported codec (encode): " + str(self.preference)

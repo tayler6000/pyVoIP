@@ -383,10 +383,10 @@ class SIPMessage:
 
         if check in self.SIPCompatibleVersions:
             self.type = SIPMessageType.RESPONSE
-            self.parseSIPResponse(data)
+            self.parse_sip_response(data)
         elif check in self.SIPCompatibleMethods:
             self.type = SIPMessageType.MESSAGE
-            self.parseSIPMessage(data)
+            self.parse_sip_message(data)
         else:
             raise SIPParseError(
                 "Unable to decipher SIP request: " + str(heading, "utf8")
@@ -772,9 +772,9 @@ class SIPMessage:
 
         self.status = SIPStatus(int(self.heading.split(b" ")[1]))
 
-        self.parse_raw_header(headers_raw, self.parseHeader)
+        self.parse_raw_header(headers_raw, self.parse_header)
 
-        self.parse_raw_body(body, self.parseBody)
+        self.parse_raw_body(body, self.parse_body)
 
     def parseSIPMessage(self, data: bytes) -> None:
         warnings.warn(
@@ -796,9 +796,9 @@ class SIPMessage:
 
         self.method = str(self.heading.split(b" ")[0], "utf8")
 
-        self.parse_raw_header(headers_raw, self.parseHeader)
+        self.parse_raw_header(headers_raw, self.parse_header)
 
-        self.parse_raw_body(body, self.parseBody)
+        self.parse_raw_body(body, self.parse_body)
 
 
 class SIPClient:
@@ -827,7 +827,7 @@ class SIPClient:
         self.fatalCallback = fatalCallback
 
         self.tags: List[str] = []
-        self.tagLibrary = {"register": self.genTag()}
+        self.tagLibrary = {"register": self.gen_tag()}
 
         self.myPort = myPort
 
@@ -863,12 +863,12 @@ class SIPClient:
                 try:
                     message = SIPMessage(raw)
                     debug(message.summary())
-                    self.parseMessage(message)
+                    self.parse_message(message)
                 except Exception as ex:
                     debug(f"Error on header parsing: {ex}")
         except SIPParseError as e:
             if "SIP Version" in str(e):
-                request = self.genSIPVersionNotSupported(message)
+                request = self.gen_sip_version_not_supported(message)
                 self.out.sendto(
                     request.encode("utf8"), (self.server, self.port)
                 )
@@ -918,7 +918,7 @@ class SIPClient:
             return
         elif message.method == "INVITE":
             if self.callCallback is None:
-                request = self.genBusy(message)
+                request = self.gen_busy(message)
                 self.out.sendto(
                     request.encode("utf8"), (self.server, self.port)
                 )
@@ -927,7 +927,7 @@ class SIPClient:
         elif message.method == "BYE":
             # TODO: If callCallback is None, the call doesn't exist, 481
             self.callCallback(message)  # type: ignore
-            response = self.genOk(message)
+            response = self.gen_ok(message)
             try:
                 # BYE comes from client cause server only acts as mediator
                 (_sender_adress, _sender_port) = message.headers["Via"][0][
@@ -947,7 +947,7 @@ class SIPClient:
         elif message.method == "CANCEL":
             # TODO: If callCallback is None, the call doesn't exist, 481
             self.callCallback(message)  # type: ignore
-            response = self.genOk(message)
+            response = self.gen_ok(message)
             self.out.sendto(response.encode("utf8"), (self.server, self.port))
         else:
             debug("TODO: Add 400 Error on non processable request")
@@ -1049,7 +1049,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         response += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.genTag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
@@ -1132,7 +1133,7 @@ class SIPClient:
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
             f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};"
-            + f"branch={self.genBranch()};rport\r\n"
+            + f"branch={self.gen_branch()};rport\r\n"
         )
         regRequest += (
             f'From: "{self.username}" '
@@ -1143,7 +1144,7 @@ class SIPClient:
             f'To: "{self.username}" '
             + f"<sip:{self.username}@{self.server}>\r\n"
         )
-        regRequest += f"Call-ID: {self.genCallID()}\r\n"
+        regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         regRequest += (
             "Contact: "
@@ -1178,12 +1179,12 @@ class SIPClient:
         subRequest = f"SUBSCRIBE sip:{self.username}@{self.server} SIP/2.0\r\n"
         subRequest += (
             f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};"
-            + f"branch={self.genBranch()};rport\r\n"
+            + f"branch={self.gen_branch()};rport\r\n"
         )
         subRequest += (
             f'From: "{self.username}" '
             + f"<sip:{self.username}@{self.server}>;tag="
-            + f"{self.genTag()}\r\n"
+            + f"{self.gen_tag()}\r\n"
         )
         subRequest += f"To: <sip:{self.username}@{self.server}>\r\n"
         subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
@@ -1215,14 +1216,14 @@ class SIPClient:
         return self.gen_register(request, deregister)
 
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
-        response = str(self.genAuthorization(request), "utf8")
+        response = str(self.gen_authorization(request), "utf8")
         nonce = request.authentication["nonce"]
         realm = request.authentication["realm"]
 
         regRequest = f"REGISTER sip:{self.server} SIP/2.0\r\n"
         regRequest += (
             f"Via: SIP/2.0/UDP {self.myIP}:{self.myPort};branch="
-            + f"{self.genBranch()};rport\r\n"
+            + f"{self.gen_branch()};rport\r\n"
         )
         regRequest += (
             f'From: "{self.username}" '
@@ -1278,7 +1279,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         response += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.genTag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         response += f"Call-ID: {request.headers['Call-ID']}\r\n"
         response += (
@@ -1311,7 +1313,8 @@ class SIPClient:
             + f"{request.headers['From']['tag']}\r\n"
         )
         okResponse += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.genTag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
         okResponse += (
@@ -1334,7 +1337,7 @@ class SIPClient:
         return self.gen_ringing(request)
 
     def gen_ringing(self, request: SIPMessage) -> str:
-        tag = self.genTag()
+        tag = self.gen_tag()
         regRequest = "SIP/2.0 180 Ringing\r\n"
         regRequest += self._gen_response_via_header(request)
         regRequest += (
@@ -1477,7 +1480,7 @@ class SIPClient:
         body += "a=maxptime:150\r\n"
         body += f"a={sendtype}\r\n"
 
-        tag = self.genTag()
+        tag = self.gen_tag()
         self.tagLibrary[call_id] = tag
 
         invRequest = f"INVITE sip:{number}@{self.server} SIP/2.0\r\n"
@@ -1560,7 +1563,8 @@ class SIPClient:
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
         ackMessage += (
-            f"To: {request.headers['To']['raw']};tag=" + f"{self.genTag()}\r\n"
+            f"To: {request.headers['To']['raw']};tag="
+            + f"{self.gen_tag()}\r\n"
         )
         ackMessage += f"From: {request.headers['From']['raw']};tag={tag}\r\n"
         ackMessage += f"Call-ID: {request.headers['Call-ID']}\r\n"
@@ -1596,10 +1600,10 @@ class SIPClient:
         ms: Dict[int, Dict[str, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
     ) -> Tuple[SIPMessage, str, int]:
-        branch = "z9hG4bK" + self.genCallID()[0:25]
-        call_id = self.genCallID()
+        branch = "z9hG4bK" + self.gen_call_id()[0:25]
+        call_id = self.gen_call_id()
         sess_id = self.sessID.next()
-        invite = self.genInvite(
+        invite = self.gen_invite(
             number, str(sess_id), ms, sendtype, branch, call_id
         )
         with self.recvLock:
@@ -1614,7 +1618,7 @@ class SIPClient:
             ) or response.headers["Call-ID"] != call_id:
                 if not self.NSD:
                     break
-                self.parseMessage(response)
+                self.parse_message(response)
                 response = SIPMessage(self.s.recv(8192))
 
             if response.status == SIPStatus(
@@ -1622,10 +1626,10 @@ class SIPClient:
             ) or response.status == SIPStatus(180):
                 return SIPMessage(invite.encode("utf8")), call_id, sess_id
             debug(f"Received Response: {response.summary()}")
-            ack = self.genAck(response)
+            ack = self.gen_ack(response)
             self.out.sendto(ack.encode("utf8"), (self.server, self.port))
             debug("Acknowledged")
-            authhash = self.genAuthorization(response)
+            authhash = self.gen_authorization(response)
             nonce = response.authentication["nonce"]
             realm = response.authentication["realm"]
             auth = (
@@ -1635,7 +1639,7 @@ class SIPClient:
                 + "algorithm=MD5\r\n"
             )
 
-            invite = self.genInvite(
+            invite = self.gen_invite(
                 number, str(sess_id), ms, sendtype, branch, call_id
             )
             invite = invite.replace(
@@ -1647,7 +1651,7 @@ class SIPClient:
             return SIPMessage(invite.encode("utf8")), call_id, sess_id
 
     def bye(self, request: SIPMessage) -> None:
-        message = self.genBye(request)
+        message = self.gen_bye(request)
         # TODO: Handle bye to server vs. bye to connected client
         self.out.sendto(message.encode("utf8"), (self.server, self.port))
 
@@ -1675,7 +1679,7 @@ class SIPClient:
 
     def __deregister(self) -> bool:
         self.phone._status = PhoneStatus.DEREGISTERING
-        firstRequest = self.genFirstRequest(deregister=True)
+        firstRequest = self.gen_first_response(deregister=True)
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
 
         self.out.setblocking(False)
@@ -1691,7 +1695,7 @@ class SIPClient:
 
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
-            regRequest = self.genRegister(response, deregister=True)
+            regRequest = self.gen_register(response, deregister=True)
             self.out.sendto(
                 regRequest.encode("utf8"), (self.server, self.port)
             )
@@ -1771,7 +1775,7 @@ class SIPClient:
 
     def __register(self) -> bool:
         self.phone._status = PhoneStatus.REGISTERING
-        firstRequest = self.genFirstRequest()
+        firstRequest = self.gen_first_response()
         self.out.sendto(firstRequest.encode("utf8"), (self.server, self.port))
 
         self.out.setblocking(False)
@@ -1795,7 +1799,7 @@ class SIPClient:
 
         if response.status == SIPStatus(401):
             # Unauthorized, likely due to being password protected.
-            regRequest = self.genRegister(response)
+            regRequest = self.gen_register(response)
             self.out.sendto(
                 regRequest.encode("utf8"), (self.server, self.port)
             )
@@ -1850,7 +1854,7 @@ class SIPClient:
                 raise RetryRequiredError("Response SIP status of 500")
             else:
                 # TODO: determine if needed here
-                self.parseMessage(response)
+                self.parse_message(response)
 
         debug(response.summary())
         debug(response.raw)
@@ -1874,7 +1878,7 @@ class SIPClient:
     def subscribe(self, lastresponse: SIPMessage) -> None:
         # TODO: check if needed and maybe implement fully
         with self.recvLock:
-            subRequest = self.genSubscribe(lastresponse)
+            subRequest = self.gen_subscribe(lastresponse)
             self.out.sendto(
                 subRequest.encode("utf8"), (self.server, self.port)
             )
