@@ -478,6 +478,7 @@ class SIPClient:
                 "nonce": nonce,
                 "algorithm": algo,
                 "digest": hash_func(HA3.encode("utf8")),
+                "uri": uri,
                 "username": username,
                 "opaque": opaque,
             }
