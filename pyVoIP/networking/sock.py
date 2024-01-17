@@ -3,7 +3,7 @@ from pyVoIP.types import KEY_PASSWORD, SOCKETS
 from pyVoIP.SIP.message import SIPMessage, SIPMessageType
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.networking.nat import NAT, AddressType
-from pyVoIP.sock.transport import TransportMode
+from pyVoIP.networking.transport import TransportMode
 import json
 import math
 import pprint
@@ -445,8 +445,11 @@ class VoIPSocket(threading.Thread):
         if conn_id:
             self.sip.handle_new_connection(self.conns[conn_id])
 
-    def run(self) -> None:
+    def start(self) -> None:
         self.bind((self.bind_ip, self.bind_port))
+        super().start()
+
+    def run(self) -> None:
         if self.mode == TransportMode.UDP:
             self._udp_run()
         else:
