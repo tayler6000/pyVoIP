@@ -429,7 +429,7 @@ class SIPClient:
         else:
             hash_func = self._hash_md5
         # Get new method values
-        qop = request.authentication.get("qop", None).pop(0)
+        qop = request.authentication.get("qop", [None]).pop(0)
         opaque = request.authentication.get("opaque", None)
         userhash = request.authentication.get("userhash", False)
 
