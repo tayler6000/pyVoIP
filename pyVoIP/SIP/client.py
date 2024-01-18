@@ -417,8 +417,6 @@ class SIPClient:
         user = request.headers["From"]["user"]
         credentials = self.credentials_manager.get(server, realm, user)
         username = credentials["username"]
-        if request.authentication["header"].lower() == "proxy-authenticate":
-            username = credentials["user"]
         password = credentials["password"]
         nonce = request.authentication["nonce"]
         method = request.headers["CSeq"]["method"]
