@@ -544,19 +544,19 @@ class SIPClient:
     def gen_first_request(self, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server}:{self.port} SIP/2.0\r\n"
         regRequest += self.__gen_via(self.server, self.gen_branch())
-
-        regRequest += (
-            f'From: "{self.user}" '
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>;tag="
-            + f'{self.tagLibrary["register"]}\r\n'
+        tag = self.tagLibrary["register"]
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        regRequest += self.__gen_from_to(
+            "From",
+            self.user,
+            self.nat.get_host(self.server),
+            method=method,
+            port=self.bind_port,
+            header_parms=f";tag={tag}",
         )
-        regRequest += (
-            f'To: "{self.user}" '
-            + f"<sip:{self.user}@{self.server}:{self.port}>\r\n"
-        )
+        regRequest += self.__gen_from_to("To", self.user, self.server, method=method, port=self.port)
         regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
-        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
         trans_mode = str(self.transport_mode)
         regRequest += self.__gen_contact(
             method,
@@ -583,12 +583,22 @@ class SIPClient:
     def gen_subscribe(self, response: SIPMessage) -> str:
         subRequest = f"SUBSCRIBE sip:{self.user}@{self.server} SIP/2.0\r\n"
         subRequest += self.__gen_via(self.server, self.gen_branch())
-        subRequest += (
-            f'From: "{self.user}" '
-            + f"<sip:{self.user}@{self.server}>;tag="
-            + f"{self.gen_tag()}\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        subRequest += self.__gen_from_to(
+            "From",
+            self.user,
+            self.nat.get_host(self.server),
+            method=method,
+            port=self.bind_port,
+            header_parms=f";tag={self.gen_tag()}",
         )
-        subRequest += f"To: <sip:{self.user}@{self.server}>\r\n"
+        subRequest += self.__gen_from_to(
+            "To",
+            self.user,
+            self.server,
+            method=method,
+            port=self.port,
+        )
         subRequest += f'Call-ID: {response.headers["Call-ID"]}\r\n'
         subRequest += f"CSeq: {self.subscribeCounter.next()} SUBSCRIBE\r\n"
         # TODO: check if transport is needed
@@ -615,14 +625,21 @@ class SIPClient:
     def gen_register(self, request: SIPMessage, deregister=False) -> str:
         regRequest = f"REGISTER sip:{self.server}:{self.port} SIP/2.0\r\n"
         regRequest += self.__gen_via(self.server, self.gen_branch())
-        regRequest += (
-            f'From: "{self.user}" '
-            + f"<sip:{self.user}@{self.bind_ip}:{self.bind_port}>;tag="
-            + f'{self.tagLibrary["register"]}\r\n'
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        regRequest += self.__gen_from_to(
+            "From",
+            self.user,
+            self.nat.get_host(self.server),
+            method=method,
+            port=self.bind_port,
+            header_parms=f";tag={self.tagLibrary['register']}",
         )
-        regRequest += (
-            f'To: "{self.user}" '
-            + f"<sip:{self.user}@{self.server}:{self.port}>\r\n"
+        regRequest += self.__gen_from_to(
+            "To",
+            self.user,
+            self.server,
+            method=method,
+            port=self.port,
         )
         call_id = request.headers.get("Call-ID", self.gen_call_id())
         regRequest += f"Call-ID: {call_id}\r\n"
@@ -1133,9 +1150,21 @@ class SIPClient:
         msg = f"MESSAGE sip:{number}@{self.server} SIP/2.0\r\n"
         msg += self.__gen_via(self.server, branch)
         msg += "Max-Forwards: 70\r\n"
-        msg += f"To: <sip:{number}@{self.server}>\r\n"
-        msg += (
-            f"From: <sip:{self.user}@{self.bind_ip}>;tag={self.gen_tag()}\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        regRequest += self.__gen_from_to(
+            "From",
+            self.user,
+            self.nat.get_host(self.server),
+            method=method,
+            port=self.bind_port,
+            header_parms=f";tag={self.gen_tag()}",
+        )
+        regRequest += self.__gen_from_to(
+            "To",
+            number,
+            self.server,
+            method=method,
+            port=self.port,
         )
         msg += f"Call-ID: {call_id}\r\n"
         msg += f"CSeq: {self.messageCounter.next()} MESSAGE\r\n"
