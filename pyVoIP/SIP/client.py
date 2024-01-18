@@ -554,7 +554,9 @@ class SIPClient:
             port=self.bind_port,
             header_parms=f";tag={tag}",
         )
-        regRequest += self.__gen_from_to("To", self.user, self.server, method=method, port=self.port)
+        regRequest += self.__gen_from_to(
+            "To", self.user, self.server, method=method, port=self.port
+        )
         regRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         regRequest += f"CSeq: {self.registerCounter.next()} REGISTER\r\n"
         trans_mode = str(self.transport_mode)
@@ -1151,7 +1153,7 @@ class SIPClient:
         msg += self.__gen_via(self.server, branch)
         msg += "Max-Forwards: 70\r\n"
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
-        regRequest += self.__gen_from_to(
+        msg += self.__gen_from_to(
             "From",
             self.user,
             self.nat.get_host(self.server),
@@ -1159,7 +1161,7 @@ class SIPClient:
             port=self.bind_port,
             header_parms=f";tag={self.gen_tag()}",
         )
-        regRequest += self.__gen_from_to(
+        msg += self.__gen_from_to(
             "To",
             number,
             self.server,
