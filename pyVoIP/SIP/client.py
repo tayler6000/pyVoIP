@@ -1299,7 +1299,7 @@ class SIPClient:
         elif response.status == SIPStatus.OK:
             return True
 
-        elif response.status == SIPStatus(401) or response.statis == SIPStatus(
+        elif response.status == SIPStatus(401) or response.status == SIPStatus(
             407
         ):
             # At this point, it's reasonable to assume that
