@@ -1,7 +1,8 @@
 from pyVoIP import RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.SIP.client import SIPClient
-from pyVoIP.SIP.message import SIPMessage, SIPMessageType, SIPStatus
+from pyVoIP.SIP.message.message import SIPMessage, SIPRequest, SIPResponse
+from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.networking.sock import VoIPConnection
 from pyVoIP.networking.transport import TransportMode
 from pyVoIP.types import KEY_PASSWORD
@@ -105,7 +106,7 @@ class VoIPPhone:
         self, conn: VoIPConnection, request: SIPMessage
     ) -> Optional[str]:
         # debug("Callback: "+request.summary())
-        if request.type == SIPMessageType.REQUEST:
+        if type(request) is SIPRequest:
             # debug("This is a message")
             if request.method == "INVITE":
                 self._callback_MSG_Invite(conn, request)
@@ -113,20 +114,20 @@ class VoIPPhone:
                 self._callback_MSG_Bye(request)
             elif request.method == "OPTIONS":
                 return self._callback_MSG_Options(request)
-        else:
-            if request.status == SIPStatus.OK:
+        elif type(request) is SIPResponse:
+            if request.status == ResponseCode.OK:
                 self._callback_RESP_OK(request)
-            elif request.status == SIPStatus.NOT_FOUND:
+            elif request.status == ResponseCode.NOT_FOUND:
                 self._callback_RESP_NotFound(request)
-            elif request.status == SIPStatus.SERVICE_UNAVAILABLE:
+            elif request.status == ResponseCode.SERVICE_UNAVAILABLE:
                 self._callback_RESP_Unavailable(request)
-            elif request.status == SIPStatus.RINGING:
+            elif request.status == ResponseCode.RINGING:
                 self._callback_RESP_Ringing(request)
-            elif request.status == SIPStatus.SESSION_PROGRESS:
+            elif request.status == ResponseCode.SESSION_PROGRESS:
                 self._callback_RESP_Progress(request)
-            elif request.status == SIPStatus.BUSY_HERE:
+            elif request.status == ResponseCode.BUSY_HERE:
                 self._callback_RESP_Busy(request)
-            elif request.status == SIPStatus.REQUEST_TERMINATED:
+            elif request.status == ResponseCode.REQUEST_TERMINATED:
                 self._callback_RESP_Terminated(request)
         return None
 
@@ -355,7 +356,10 @@ class VoIPPhone:
         self, number: str, body: str, ctype: str = "text/plain"
     ) -> bool:
         response = self.sip.message(number, body, ctype)
-        return response and response.status == SIPStatus.OK
+        return (
+            type(response) is SIPResponse
+            and response.status == ResponseCode.OK
+        )
 
     def request_port(self, blocking=True) -> int:
         ports_available = [

@@ -35,6 +35,9 @@ def parse_raw_headers(raw_headers: List[bytes]) -> Dict[str, Any]:
 
     parsed_headers: Dict[str, Any] = {}
     for key, val in headers.items():
+        if key in COMPACT_KEY.keys():
+            key = COMPACT_KEY[key]
+
         parsed_headers[key] = parse_header(key, val)
     return parsed_headers
 
@@ -107,9 +110,6 @@ def get_uri_header(data: str) -> URI_HEADER:
 
 
 def parse_header(header: str, data: str) -> Any:
-    if header in COMPACT_KEY.keys():
-        header = COMPACT_KEY[header]
-
     if header == "Via":
         vias = []
         for d in data:
@@ -159,10 +159,10 @@ def parse_header(header: str, data: str) -> Any:
         data = data.replace(f"{method} ", "")
         auth_match = regex.AUTH_MATCH
         row_data = auth_match.findall(data)
-        header_data: Dict[str, Any] = {"header": header, "method": method}
+        auth_data: Dict[str, Any] = {"header": header, "method": method}
         for var, data in row_data:
             if var == "userhash":
-                header_data[var] = (
+                auth_data[var] = (
                     False if data.strip('"').lower() == "false" else True
                 )
                 continue
@@ -170,30 +170,30 @@ def parse_header(header: str, data: str) -> Any:
                 authorized = data.strip('"').split(",")
                 for i, value in enumerate(authorized):
                     authorized[i] = value.strip()
-                header_data[var] = authorized
+                auth_data[var] = authorized
                 continue
-            header_data[var] = data.strip('"')
-        return header_data
+            auth_data[var] = data.strip('"')
+        return auth_data
     elif header == "Target-Dialog":
         # Target-Dialog (tdialog) is specified in RFC 4538
         params = data.split(";")
-        header_data: Dict[str, Any] = {
+        td_data: Dict[str, Any] = {
             "callid": params.pop(0)
         }  # key is callid to be consitenent with RFC 4538 Section 7
         for x in params:
             y = x.split("=")
-            header_data[y[0]] = y[1]
-        return header_data
+            td_data[y[0]] = y[1]
+        return td_data
     elif header == "Refer-Sub":
         # Refer-Sub (norefersub) is specified in RFC 4488
         params = data.split(";")
-        header_data: Dict[str, Any] = {
+        rs_data: Dict[str, Any] = {
             "value": True if params.pop(0) == "true" else False
         }  # BNF states extens are possible
         for x in params:
             y = x.split("=")
-            header_data[y[0]] = y[1]
-        return header_data
+            rs_data[y[0]] = y[1]
+        return rs_data
     else:
         try:
             return int(data)
@@ -339,7 +339,7 @@ def parse_sdp_tag(parsed_body: Dict[str, Any], field: str, data: str) -> Any:
             d = data.split(":")
             parsed_body[field] = {"method": d[0], "key": d[1]}
         else:
-            parsed_body[field] = {"method": d}
+            parsed_body[field] = {"method": data}
     elif field == "m":
         # SDP 5.14 Media Descriptions
         # m=<media> <port>/<number of ports> <proto> <fmt> ...

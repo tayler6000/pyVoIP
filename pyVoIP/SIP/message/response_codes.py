@@ -16,6 +16,9 @@ class ResponseCode(Enum):
     def __str__(self) -> str:
         return f"{self._value_} {self.phrase}"
 
+    def __repr__(self) -> str:
+        return str(self)
+
     @property
     def phrase(self) -> str:
         return self._phrase

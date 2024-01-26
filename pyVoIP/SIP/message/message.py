@@ -6,7 +6,7 @@ from pyVoIP.SIP.message.parse import (
     parse_raw_body,
     get_uri_header,
 )
-from pyVoIP.response_codes import ResponseCode
+from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.types import URI_HEADER
 from typing import Any, Dict, List, Union
 import pyVoIP
@@ -25,12 +25,22 @@ class SIPMethod(Enum):
     CANCEL = "CANCEL"
     OPTIONS = "OPTIONS"
     NOTIFY = "NOTIFY"
+    REGISTER = "REGISTER"
+    MESSAGE = "MESSAGE"
+    SUBSCRIBE = "SUBSCRIBE"
+    REFER = "REFER"
+
+    def __str__(self) -> str:
+        return self._value_
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class SIPMessage:
     def __init__(
         self,
-        start_line: str,
+        start_line: List[str],
         headers: Dict[str, Any],
         body: Dict[str, Any],
         authentication: Dict[str, Union[str, List[str]]],
@@ -59,9 +69,9 @@ class SIPMessage:
         return data
 
     @staticmethod
-    def from_bytes(data: bytes) -> "SIPMessage":
+    def from_bytes(data: bytes) -> Union["SIPRequest", "SIPResponse"]:
         parsed_headers: Dict[str, Any] = {"Via": []}
-        body: Dict[str, Any] = {}
+        parsed_body: Dict[str, Any] = {}
         authentication: Dict[str, Union[str, List[str]]] = {}
         version_match = regex.SIP_VERSION_MATCH
 
@@ -136,11 +146,20 @@ class SIPMessage:
                 raise SIPParseError(e) from e
             raise
 
+    @staticmethod
+    def from_string(data: str) -> Union["SIPRequest", "SIPResponse"]:
+        try:
+            return SIPMessage.from_bytes(data.encode("utf8"))
+        except Exception as e:
+            if type(e) is not SIPParseError:
+                raise SIPParseError(e) from e
+            raise
+
 
 class SIPRequest(SIPMessage):
     def __init__(
         self,
-        start_line: str,
+        start_line: List[str],
         headers: Dict[str, Any],
         body: Dict[str, Any],
         authentication: Dict[str, Union[str, List[str]]],
@@ -168,7 +187,7 @@ class SIPRequest(SIPMessage):
 class SIPResponse(SIPMessage):
     def __init__(
         self,
-        start_line: str,
+        start_line: List[str],
         headers: Dict[str, Any],
         body: Dict[str, Any],
         authentication: Dict[str, Union[str, List[str]]],
