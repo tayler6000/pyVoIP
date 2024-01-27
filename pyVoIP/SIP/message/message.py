@@ -100,7 +100,7 @@ class SIPMessage:
                     raise SIPParseError(
                         f"SIP Version {start_line[2]} not compatible."
                     )
-                if start_line[0] not in SIPMethod:
+                if start_line[0] not in map(lambda x: str(x), list(SIPMethod)):
                     raise SIPParseError(
                         f"SIP Method `{start_line[0]}` not supported."
                     )

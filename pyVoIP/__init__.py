@@ -91,7 +91,7 @@ def debug(s, e=None):
 
 # noqa because import will fail if debug is not defined
 from pyVoIP.RTP import PayloadType  # noqa: E402
-from pyVoIP.SIP.message.message import SIPMethod
+from pyVoIP.SIP.message.message import SIPMethod  # noqa: E402
 
 SIPCompatibleVersions = ["SIP/2.0"]
 SIPCompatibleMethods = list(map(lambda x: str(x), list(SIPMethod)))

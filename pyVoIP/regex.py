@@ -5,6 +5,7 @@ Python offers regex compilation so you only have to compile once, not on
 each search. This module holds all the compiled regex so it can be compiled
 once on startup, then used directly later by other modules.
 """
+
 import re
 
 

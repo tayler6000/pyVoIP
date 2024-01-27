@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
-from pyVoIP.SIP.message.message import SIPMessage, SIPResponse, SIPRequest
+from pyVoIP.SIP.message.message import SIPMessage, SIPRequest
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.networking.transport import TransportMode

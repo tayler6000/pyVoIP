@@ -98,7 +98,7 @@ class VoIPCall:
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            if type(message) is SIPResonse:
+            if type(message) is SIPResponse:
                 if message.status is ResponseCode.OK:
                     if self.state in [
                         CallState.DIALING,
