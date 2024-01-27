@@ -549,9 +549,9 @@ class SIPClient:
         regRequest += self.__gen_from_to(
             "From",
             self.user,
-            self.nat.get_host(self.server),
+            self.server,
             method=method,
-            port=self.bind_port,
+            port=self.port,
             header_parms=f";tag={tag}",
         )
         regRequest += self.__gen_from_to(
@@ -631,9 +631,9 @@ class SIPClient:
         regRequest += self.__gen_from_to(
             "From",
             self.user,
-            self.nat.get_host(self.server),
+            self.server,
             method=method,
-            port=self.bind_port,
+            port=self.port,
             header_parms=f";tag={self.tagLibrary['register']}",
         )
         regRequest += self.__gen_from_to(
