@@ -1,7 +1,13 @@
 from enum import Enum
 from pyVoIP import RTP
 from pyVoIP.SIP.error import SIPParseError
-from pyVoIP.SIP.message import SIPMessage, SIPMessageType, SIPStatus
+from pyVoIP.SIP.message.message import (
+    SIPMessage,
+    SIPMethod,
+    SIPResponse,
+    SIPRequest,
+)
+from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.VoIP.error import InvalidStateError
 from threading import Lock, Timer
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -89,21 +95,21 @@ class VoIPCall:
             if data is None:
                 continue
             try:
-                message = SIPMessage(data)
+                message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            if message.type is SIPMessageType.RESPONSE:
-                if message.status is SIPStatus.OK:
+            if type(message) is SIPResponse:
+                if message.status is ResponseCode.OK:
                     if self.state in [
                         CallState.DIALING,
                         CallState.RINGING,
                         CallState.PROGRESS,
                     ]:
                         self.answered(message)
-                elif message.status == SIPStatus.NOT_FOUND:
+                elif message.status == ResponseCode.NOT_FOUND:
                     pass
             else:
-                if message.method == "BYE":
+                if message.method == SIPMethod.BYE:
                     self.bye(message)
 
     def init_outgoing_call(self, ms: Optional[Dict[int, RTP.PayloadType]]):
@@ -279,16 +285,22 @@ class VoIPCall:
         if self.state != CallState.RINGING:
             raise InvalidStateError("Call is not ringing")
         m = self.gen_ms()
-        message = self.sip.gen_answer(
+        data = self.sip.gen_answer(
             self.request, self.session_id, m, self.sendmode
         )
-        self.conn.send(message)
-        message = SIPMessage(self.conn.recv())
-        if message.method != "ACK":
+        self.conn.send(data)
+        message = SIPMessage.from_bytes(self.conn.recv())
+        if type(message) is SIPResponse:
             debug(
-                f"Received Message to OK other than ACK: {message.method}:\n\n"
+                f"Received Response to OK instead of ACK: {message.status}:\n\n"
                 + f"{message.summary()}",
-                f"Received Message to OK other than ACK: {message.method}",
+                f"Received Response to OK instead of ACK: {message.status}",
+            )
+        elif type(message) is SIPRequest and message.method != SIPMethod.ACK:
+            debug(
+                f"Received Request to OK other than ACK: {message.method}:\n\n"
+                + f"{message.summary()}",
+                f"Received Request to OK other than ACK: {message.method}",
             )
         self.state = CallState.ANSWERED
 
@@ -313,13 +325,15 @@ class VoIPCall:
         new_dialog = True
         conn = self.sip.send(request)
         conn.send(request)
-        response = SIPMessage(conn.recv())
+        response = SIPMessage.from_bytes(conn.recv())
+        if type(response) is not SIPResponse:
+            return False
 
         if response.status not in [
-            SIPStatus.OK,
-            SIPStatus.TRYING,
-            SIPStatus.ACCEPTED,
-            SIPStatus.BAD_EXTENSION,
+            ResponseCode.OK,
+            ResponseCode.TRYING,
+            ResponseCode.ACCEPTED,
+            ResponseCode.BAD_EXTENSION,
         ]:
             # If we've not received any of these responses, the client likely
             # does not accept out of dialog REFER requests.
@@ -330,10 +344,12 @@ class VoIPCall:
                 self.request, user, uri, blind, new_dialog=False
             )
             conn.send(request)
-            response = SIPMessage(conn.recv())
+            response = SIPMessage.from_bytes(conn.recv())
+            if type(response) is not SIPResponse:
+                return False
 
         norefersub = True
-        if blind and response.status == SIPStatus.BAD_EXTENSION:
+        if blind and response.status == ResponseCode.BAD_EXTENSION:
             # If the client does not support norefersub, resend without it.
             norefersub = False
             if new_dialog:
@@ -343,9 +359,11 @@ class VoIPCall:
                 conn = self.sip.send(request)
             else:
                 conn.send(request)
-            response = SIPMessage(conn.recv())
+            response = SIPMessage.from_bytes(conn.recv())
+            if type(response) is not SIPResponse:
+                return False
 
-        if response.status not in [SIPStatus.OK, SIPStatus.ACCEPTED]:
+        if response.status not in [ResponseCode.OK, ResponseCode.ACCEPTED]:
             return False
         if blind:
             if norefersub:
@@ -353,17 +371,20 @@ class VoIPCall:
                     conn.close()
                 self.hangup()
                 return True
-        response = SIPMessage(conn.recv())
-        while response.method == "NOTIFY" and response.body.get(
-            "content", b""
-        ) in [
-            b"",
-            b"SIP/2.0 100 Trying\r\n",
-            b"SIP/2.0 181 Ringing\r\n",
-        ]:
+        response = SIPMessage.from_bytes(conn.recv())
+        while (
+            type(response) is SIPRequest
+            and response.method == SIPMethod.NOTIFY
+            and response.body.get("content", b"")
+            in [
+                b"",
+                b"SIP/2.0 100 Trying\r\n",
+                b"SIP/2.0 181 Ringing\r\n",
+            ]
+        ):
             reply = self.sip.gen_ok(response)
             conn.send(reply)
-            response = SIPMessage(conn.recv())
+            response = SIPMessage.from_bytes(conn.recv())
         if response.body.get("content", b"") == b"SIP/2.0 200 OK\r\n":
             reply = self.sip.gen_ok(response)
             conn.send(reply)
@@ -478,7 +499,7 @@ class VoIPCall:
             self.request = request
 
     def busy(self, request: SIPMessage) -> None:
-        self.bye()
+        self.bye(request)
 
     def deny(self) -> None:
         if self.state != CallState.RINGING:

@@ -1,4 +1,4 @@
-from pyVoIP.SIP.message import SIPMessage
+from pyVoIP.SIP.message.message import SIPMessage, SIPRequest
 import pytest
 
 
@@ -459,7 +459,8 @@ import pytest
     ],
 )
 def test_sip_headers(packet, expected):
-    message = SIPMessage(packet)
+    message = SIPMessage.from_bytes(packet)
+    assert type(message) is SIPRequest
     assert message.headers == expected
 
 
@@ -567,5 +568,6 @@ def test_sip_headers(packet, expected):
     ],
 )
 def test_sip_to(packet, expected):
-    message = SIPMessage(packet)
-    assert message.to == expected
+    message = SIPMessage.from_bytes(packet)
+    assert type(message) is SIPRequest
+    assert message.destination == expected

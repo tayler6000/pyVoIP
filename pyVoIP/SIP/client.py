@@ -11,11 +11,13 @@ from pyVoIP.SIP.error import (
     InvalidAccountInfoError,
     RetryRequiredError,
 )
-from pyVoIP.SIP.message import (
+from pyVoIP.SIP.message.message import (
     SIPMessage,
-    SIPStatus,
-    SIPMessageType,
+    SIPMethod,
+    SIPResponse,
+    SIPRequest,
 )
+from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.types import KEY_PASSWORD
 from pyVoIP.VoIP.status import PhoneStatus
 import pyVoIP
@@ -35,10 +37,14 @@ debug = pyVoIP.debug
 
 
 UNAUTORIZED_RESPONSE_CODES = [
-    SIPStatus.UNAUTHORIZED,
-    SIPStatus.PROXY_AUTHENTICATION_REQUIRED,
+    ResponseCode.UNAUTHORIZED,
+    ResponseCode.PROXY_AUTHENTICATION_REQUIRED,
 ]
-INVITE_OK_RESPONSE_CODES = [SIPStatus.TRYING, SIPStatus.RINGING, SIPStatus.OK]
+INVITE_OK_RESPONSE_CODES = [
+    ResponseCode.TRYING,
+    ResponseCode.RINGING,
+    ResponseCode.OK,
+]
 
 
 class SIPClient:
@@ -107,7 +113,7 @@ class SIPClient:
                 raw = self.s.recv(8192)
                 if raw != b"\x00\x00\x00\x00":
                     try:
-                        message = SIPMessage(raw)
+                        message = SIPMessage.from_bytes(raw)
                         debug(message.summary())
                         self.parse_message(message)
                     except Exception as ex:
@@ -133,13 +139,13 @@ class SIPClient:
                         raise
 
     def handle_new_connection(self, conn: "VoIPConnection") -> None:
-        message = SIPMessage(conn.peak())
-        if message.type == SIPMessageType.REQUEST:
-            if message.method == "INVITE":
+        message = SIPMessage.from_bytes(conn.peak())
+        if type(message) is SIPRequest:
+            if message.method == SIPMethod.INVITE:
                 self._handle_invite(conn)
 
     def _handle_invite(self, conn: "VoIPConnection") -> None:
-        message = SIPMessage(conn.peak())
+        message = SIPMessage.from_bytes(conn.peak())
         if self.call_callback is None:
             request = self.gen_busy(message)
             conn.send(request)
@@ -147,20 +153,20 @@ class SIPClient:
             self.call_callback(conn, message)
 
     def parse_message(self, message: SIPMessage) -> None:
-        if message.type != SIPMessageType.REQUEST:
+        if type(message) is SIPResponse:
             if message.status in (
-                SIPStatus.OK,
-                SIPStatus.NOT_FOUND,
-                SIPStatus.SERVICE_UNAVAILABLE,
-                SIPStatus.PROXY_AUTHENTICATION_REQUIRED,
-                SIPStatus.RINGING,
-                SIPStatus.BUSY_HERE,
-                SIPStatus.SESSION_PROGRESS,
-                SIPStatus.REQUEST_TERMINATED,
+                ResponseCode.OK,
+                ResponseCode.NOT_FOUND,
+                ResponseCode.SERVICE_UNAVAILABLE,
+                ResponseCode.PROXY_AUTHENTICATION_REQUIRED,
+                ResponseCode.RINGING,
+                ResponseCode.BUSY_HERE,
+                ResponseCode.SESSION_PROGRESS,
+                ResponseCode.REQUEST_TERMINATED,
             ):
                 if self.call_callback is not None:
                     self.call_callback(message)
-            elif message.status == SIPStatus.TRYING:
+            elif message.status == ResponseCode.TRYING:
                 pass
             else:
                 debug(
@@ -169,38 +175,39 @@ class SIPClient:
                     "TODO: Add 500 Error on Receiving SIP Response",
                 )
             return
-        elif message.method == "BYE":
-            # TODO: If callCallback is None, the call doesn't exist, 481
-            if self.call_callback:
-                self.call_callback(message)
-            response = self.gen_ok(message)
-            try:
-                # BYE comes from client cause server only acts as mediator
-                (_sender_adress, _sender_port) = message.headers["Via"][0][
-                    "address"
-                ]
-                self.sendto(
-                    response,
-                    (_sender_adress, int(_sender_port)),
-                )
-            except Exception:
-                debug("BYE Answer failed falling back to server as target")
+        elif type(message) is SIPRequest:
+            if message.method == "BYE":
+                # TODO: If callCallback is None, the call doesn't exist, 481
+                if self.call_callback:
+                    self.call_callback(message)
+                response = self.gen_ok(message)
+                try:
+                    # BYE comes from client cause server only acts as mediator
+                    (_sender_adress, _sender_port) = message.headers["Via"][0][
+                        "address"
+                    ]
+                    self.sendto(
+                        response,
+                        (_sender_adress, int(_sender_port)),
+                    )
+                except Exception:
+                    debug("BYE Answer failed falling back to server as target")
+                    self.sendto(response, message.headers["Via"]["address"])
+            elif message.method == "ACK":
+                return
+            elif message.method == "CANCEL":
+                # TODO: If callCallback is None, the call doesn't exist, 481
+                self.call_callback(message)  # type: ignore
+                response = self.gen_ok(message)
                 self.sendto(response, message.headers["Via"]["address"])
-        elif message.method == "ACK":
-            return
-        elif message.method == "CANCEL":
-            # TODO: If callCallback is None, the call doesn't exist, 481
-            self.call_callback(message)  # type: ignore
-            response = self.gen_ok(message)
-            self.sendto(response, message.headers["Via"]["address"])
-        elif message.method == "OPTIONS":
-            if self.call_callback:
-                response = str(self.call_callback(message))
+            elif message.method == "OPTIONS":
+                if self.call_callback:
+                    response = str(self.call_callback(message))
+                else:
+                    response = self._gen_options_response(message)
+                self.sendto(response, message.headers["Via"]["address"])
             else:
-                response = self._gen_options_response(message)
-            self.sendto(response, message.headers["Via"]["address"])
-        else:
-            debug("TODO: Add 400 Error on non processable request")
+                debug("TODO: Add 400 Error on non processable request")
 
     def start(self) -> None:
         if self.NSD:
@@ -1109,25 +1116,32 @@ class SIPClient:
         )
         conn = self.sendto(invite)
         debug("Invited")
-        response = SIPMessage(conn.recv(8192))
+        response = SIPMessage.from_bytes(conn.recv(8192))
 
         while (
-            response.status
-            not in UNAUTORIZED_RESPONSE_CODES + INVITE_OK_RESPONSE_CODES
-        ) or response.headers["Call-ID"] != call_id:
+            type(response) is SIPResponse
+            and (
+                response.status
+                not in UNAUTORIZED_RESPONSE_CODES + INVITE_OK_RESPONSE_CODES
+            )
+            or response.headers["Call-ID"] != call_id
+        ):
             if not self.NSD:
                 break
             debug(f"Received Response: {response.summary()}")
             self.parse_message(response)
-            response = SIPMessage(conn.recv(8192))
+            response = SIPMessage.from_bytes(conn.recv(8192))
 
         debug(f"Received Response: {response.summary()}")
 
-        if response.status in INVITE_OK_RESPONSE_CODES:
+        if (
+            type(response) is SIPResponse
+            and response.status in INVITE_OK_RESPONSE_CODES
+        ):
             debug("Invite Accepted")
-            if response.status is SIPStatus.OK:
+            if response.status is ResponseCode.OK:
                 return response, call_id, sess_id, conn
-            return SIPMessage(invite.encode("utf8")), call_id, sess_id, conn
+            return SIPMessage.from_string(invite), call_id, sess_id, conn
         debug("Invite Requires Authorization")
         ack = self.gen_ack(response)
         conn.send(ack)
@@ -1144,7 +1158,7 @@ class SIPClient:
 
         conn = self.sendto(invite)
 
-        return SIPMessage(invite.encode("utf8")), call_id, sess_id, conn
+        return SIPMessage.from_string(invite), call_id, sess_id, conn
 
     def gen_message(
         self, number: str, body: str, ctype: str, branch: str, call_id: str
@@ -1186,14 +1200,16 @@ class SIPClient:
         debug("Message")
         auth = False
         while True:
-            response = SIPMessage(conn.recv(8192))
+            response = SIPMessage.from_bytes(conn.recv(8192))
             debug(f"Received Response: {response.summary()}")
             self.parse_message(response)
-            if response.status == SIPStatus(100):
+            if type(response) is not SIPResponse:
                 continue
-            if response.status == SIPStatus(
+            if response.status == ResponseCode(100):
+                continue
+            if response.status == ResponseCode(
                 401
-            ) or response.status == SIPStatus(407):
+            ) or response.status == ResponseCode(407):
                 if auth:
                     debug("Auth Failure")
                     break
@@ -1204,7 +1220,7 @@ class SIPClient:
                 )
                 conn.send(msg)
                 continue
-            if response.status == SIPStatus.OK:
+            if response.status == ResponseCode.OK:
                 break
             if self.NSD:
                 break
@@ -1220,8 +1236,8 @@ class SIPClient:
                 request.headers["Contact"]["port"],
             ),
         )
-        response = SIPMessage(conn.recv(8192))
-        if response.status == SIPStatus(401):
+        response = SIPMessage.from_bytes(conn.recv(8192))
+        if response.status == ResponseCode(401):
             #  Requires password
             auth = self.gen_authorization(response)
             message = message.replace(
@@ -1267,35 +1283,35 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401):
+        if response.status == ResponseCode(401):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response, deregister=True)
             conn = self.send(password_request)
             response = self.__receive(conn)
             conn.close()
 
-        if response.status == SIPStatus(400):
+        if response.status == ResponseCode(400):
             # Bad Request
             # TODO: implement
             # TODO: check if broken connection can be brought back
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        elif response.status == SIPStatus(407):
+        elif response.status == ResponseCode(407):
             # Proxy Authentication Required
             # TODO: implement
             debug("Proxy auth required")
 
-        elif response.status == SIPStatus(500):
+        elif response.status == ResponseCode(500):
             # We raise so the calling function can sleep and try again
             raise RetryRequiredError(
                 "Received a 500 error when deregistering."
             )
 
-        elif response.status == SIPStatus.OK:
+        elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == SIPStatus(401):
+        elif response.status == ResponseCode(401):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
             debug("=" * 50)
@@ -1368,33 +1384,33 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401):
+        if response.status == ResponseCode(401):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response)
             conn = self.send(password_request)
             response = self.__receive(conn)
             conn.close()
 
-        if response.status == SIPStatus(400):
+        if response.status == ResponseCode(400):
             # Bad Request
             # TODO: implement
             # TODO: check if broken connection can be brought back
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        elif response.status == SIPStatus(407):
+        elif response.status == ResponseCode(407):
             # Proxy Authentication Required
             # TODO: implement
             debug("Proxy auth required")
 
-        elif response.status == SIPStatus(500):
+        elif response.status == ResponseCode(500):
             # We raise so the calling function can sleep and try again
             raise RetryRequiredError("Received a 500 error when registering.")
 
-        elif response.status == SIPStatus.OK:
+        elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == SIPStatus(401):
+        elif response.status == ResponseCode(401):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
             debug("=" * 50)
@@ -1428,25 +1444,34 @@ class SIPClient:
         subRequest = self.gen_subscribe(lastresponse)
         conn = self.sendto(subRequest)
 
-        response = SIPMessage(conn.recv(8192))
+        response = SIPMessage.from_bytes(conn.recv(8192))
 
-        debug(f'Got response to subscribe: {str(response.heading, "utf8")}')
+        debug(f'Got response to subscribe: {str(response.start_line, "utf8")}')
 
-    def __receive(self, conn: "VoIPConnection") -> SIPMessage:
+    def __receive(self, conn: "VoIPConnection") -> SIPResponse:
         """
         Some servers need time to process the response.
         When this happens, the first response you get from the server is
-        SIPStatus.TRYING. This while loop tries checks every second for an
+        ResponseCode.TRYING. This while loop tries checks every second for an
         updated response. It times out after 30 seconds with no response.
         """
         try:
-            response = SIPMessage(conn.recv(8128, self.register_timeout))
-            while response.status == SIPStatus.TRYING and self.NSD:
-                response = SIPMessage(conn.recv(8128, self.register_timeout))
+            response = SIPMessage.from_bytes(
+                conn.recv(8128, self.register_timeout)
+            )
+            while (
+                type(response) is SIPResponse
+                and response.status == ResponseCode.TRYING
+                and self.NSD
+            ):
+                response = SIPMessage.from_bytes(
+                    conn.recv(8128, self.register_timeout)
+                )
                 time.sleep(1)
         except TimeoutError:
             raise TimeoutError(
                 f"Waited {self.register_timeout} seconds but the server is "
                 + "still TRYING or has not responded."
             )
+        assert type(response) is SIPResponse
         return response

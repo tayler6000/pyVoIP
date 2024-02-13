@@ -1,4 +1,4 @@
-from pyVoIP.SIP.message import SIPMessage
+from pyVoIP.SIP.message.message import SIPMessage, SIPResponse
 import pytest
 
 
@@ -83,7 +83,8 @@ import pytest
     ],
 )
 def test_sip_authentication(packet, expected):
-    message = SIPMessage(packet)
+    message = SIPMessage.from_bytes(packet)
+    assert type(message) is SIPResponse
     assert message.authentication == expected
 
 
@@ -206,7 +207,8 @@ def test_sip_authentication(packet, expected):
     ],
 )
 def test_sip_to_from(packet, expected):
-    message = SIPMessage(packet)
+    message = SIPMessage.from_bytes(packet)
+    assert type(message) is SIPResponse
     assert type(message.headers["To"]) == dict
     assert message.headers["To"] == expected
 
@@ -293,5 +295,6 @@ def test_sip_to_from(packet, expected):
     ],
 )
 def test_multi_via(packet, expected):
-    message = SIPMessage(packet)
+    message = SIPMessage.from_bytes(packet)
+    assert type(message) is SIPResponse
     assert message.headers["Via"] == expected
