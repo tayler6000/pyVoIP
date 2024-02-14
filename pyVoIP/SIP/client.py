@@ -1237,7 +1237,7 @@ class SIPClient:
             ),
         )
         response = SIPMessage.from_bytes(conn.recv(8192))
-        if response.status == SIPStatus(401) or response.status == SIPStatus(
+        if response.status == ResponseCode(401) or response.status == ResponseCode(
             407
         ):
             #  Requires password
@@ -1285,7 +1285,7 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401) or response.status == SIPStatus(
+        if response.status == ResponseCode(401) or response.status == ResponseCode(
             407
         ):
             # Unauthorized, likely due to being password protected.
@@ -1301,11 +1301,6 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        elif response.status == ResponseCode(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
-
         elif response.status == ResponseCode(500):
             # We raise so the calling function can sleep and try again
             raise RetryRequiredError(
@@ -1315,7 +1310,7 @@ class SIPClient:
         elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == SIPStatus(401) or response.status == SIPStatus(
+        elif response.status == ResponseCode(401) or response.status == ResponseCode(
             407
         ):
             # At this point, it's reasonable to assume that
@@ -1390,7 +1385,7 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == SIPStatus(401) or response.status == SIPStatus(
+        if response.status == ResponseCode(401) or response.status == ResponseCode(
             407
         ):
             # Unauthorized, likely due to being password protected.
@@ -1406,11 +1401,6 @@ class SIPClient:
             # with new urn:uuid or reply with expire 0
             self._handle_bad_request()
 
-        elif response.status == ResponseCode(407):
-            # Proxy Authentication Required
-            # TODO: implement
-            debug("Proxy auth required")
-
         elif response.status == ResponseCode(500):
             # We raise so the calling function can sleep and try again
             raise RetryRequiredError("Received a 500 error when registering.")
@@ -1418,7 +1408,7 @@ class SIPClient:
         elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == SIPStatus(401) or response.status == SIPStatus(
+        elif response.status == ResponseCode(401) or response.status == ResponseCode(
             407
         ):
             # At this point, it's reasonable to assume that
