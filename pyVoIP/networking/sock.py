@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
-from pyVoIP.SIP.message import SIPMessage, SIPMessageType
+from pyVoIP.SIP.message.message import SIPMessage, SIPRequest
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.networking.transport import TransportMode
@@ -42,27 +42,27 @@ class VoIPConnection:
             self.message
         )
         self._peak_buffer: Optional[bytes] = None
-        if conn and message.type == SIPMessageType.REQUEST:
+        if conn and type(message) is SIPRequest:
             if self.sock.mode.tls_mode:
                 client_context = ssl.create_default_context()
                 client_context.check_hostname = pyVoIP.TLS_CHECK_HOSTNAME
                 client_context.verify_mode = pyVoIP.TLS_VERIFY_MODE
                 self.conn = client_context.wrap_socket(
-                    self.conn, server_hostname=message.to["host"]
+                    self.conn, server_hostname=message.destination["host"]
                 )
-            addr = (message.to["host"], message.to["port"])
+            addr = (message.destination["host"], message.destination["port"])
             self.conn.connect(addr)
 
     def send(self, data: Union[bytes, str]) -> None:
         if type(data) is str:
             data = data.encode("utf8")
         try:
-            msg = SIPMessage(data)
+            msg = SIPMessage.from_bytes(data)
         except SIPParseError:
             return
         if not self.conn:  # If UDP
-            if msg.type == SIPMessageType.REQUEST:
-                addr = (msg.to["host"], msg.to["port"])
+            if type(msg) is SIPRequest:
+                addr = (msg.destination["host"], msg.destination["port"])
             else:
                 addr = msg.headers["Via"][0]["address"]
             self.sock.s.sendto(data, addr)
@@ -95,7 +95,7 @@ class VoIPConnection:
         while not msg and not self.sock.SD:
             data = self.conn.recv(nbytes)
             try:
-                msg = SIPMessage(data)
+                msg = SIPMessage.from_bytes(data)
             except SIPParseError as e:
                 br = self.sock.gen_bad_request(
                     connection=self, error=e, received=data
@@ -402,7 +402,7 @@ class VoIPSocket(threading.Thread):
             debug(f"Received new {self.mode} connection from {addr}.")
             data = conn.recv(8192)
             try:
-                message = SIPMessage(data)
+                message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
             debug("\n\nReceived SIP Message:")
@@ -416,7 +416,7 @@ class VoIPSocket(threading.Thread):
             except OSError:
                 continue
             try:
-                message = SIPMessage(data)
+                message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
             debug("\n\nReceived UDP Message:")
@@ -471,11 +471,11 @@ class VoIPSocket(threading.Thread):
         Creates a new connection, sends the data, then returns the socket
         """
         if self.mode == TransportMode.UDP:
-            conn = VoIPConnection(self, None, SIPMessage(data))
+            conn = VoIPConnection(self, None, SIPMessage.from_bytes(data))
             self.__register_connection(conn)
             conn.send(data)
             return conn
         s = socket.socket(socket.AF_INET, self.mode.socket_type)
-        conn = VoIPConnection(self, s, SIPMessage(data))
+        conn = VoIPConnection(self, s, SIPMessage.from_bytes(data))
         conn.send(data)
         return conn
