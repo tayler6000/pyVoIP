@@ -1639,6 +1639,10 @@ class SIPClient:
                 + "algorithm=MD5\r\n"
             )
 
+            hexindex = -5 # increment the hex digit at this position to get a slightly different branch id
+            hexdigit = (int(branch[hexindex],16) + 1) & 15
+            branch = branch[0:hexindex] + f'{hexdigit:x}' + branch[hexindex+1:]
+
             invite = self.gen_invite(
                 number, str(sess_id), ms, sendtype, branch, call_id
             )
