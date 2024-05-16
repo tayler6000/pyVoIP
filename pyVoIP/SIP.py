@@ -370,7 +370,7 @@ class SIPMessage:
 
         return data
     
-    def replace_content_length_and_type(text, new_length):
+    def replace_content_length_and_type(self, text, new_length):
         clpattern = r"Content-Length: \d+\r\n"
         clreplacement = f"Content-Length: {new_length}\r\n"
         updated_text = re.sub(clpattern, clreplacement, text)
