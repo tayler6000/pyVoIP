@@ -369,10 +369,41 @@ class SIPMessage:
         data += str(self.raw)
 
         return data
+    
+    def replace_content_length_and_type(text, new_length):
+        clpattern = r"Content-Length: \d+\r\n"
+        clreplacement = f"Content-Length: {new_length}\r\n"
+        updated_text = re.sub(clpattern, clreplacement, text)
+        ctpattern = r"Content-Type: .+\r\n"
+        ctreplacement = f"Content-Type: application/sdp\r\n"
+        updated_text = re.sub(ctpattern, ctreplacement, updated_text)
+        return updated_text
 
     def parse(self, data: bytes) -> None:
+
         try:
-            headers, body = data.split(b"\r\n\r\n")
+
+            parts = data.split(b"\r\n\r\n") # Split the data into it parts, assuming it might contain a multipart message
+            headers = parts[0] # The first part is the headers
+            headerlines = headers.split(b"\r\n") # Split the headers into lines
+
+            if any(b"Content-Type: multipart/mixed;boundary=" in headerline for headerline in headerlines):
+                # We have a multipart message
+                res = [multipartboundary for multipartboundary in headerlines if b"Content-Type: multipart/mixed;boundary=" in multipartboundary] # Find the boundary
+                boundary = res[0].split(b"boundary=")[1] # Get the boundary
+                
+                for idx, part in enumerate(parts[1:]):
+                    partlines = part.split(b"\r\n")
+                    if b"Content-Type: application/sdp" in partlines:
+                        body = parts[idx+2]
+                        body += b"\r\n"
+                        # Update the Content-Length header to reflect the actual length of the body
+                        part_length = len(body)
+                        headers = self.replace_content_length_and_type(headers.decode(), part_length).encode()
+                        break
+            else: # We have a standard SIP message
+                headers, body = data.split(b"\r\n\r\n")
+
         except ValueError as ve:
             debug(f"Error unpacking data, only using header: {ve}")
             headers = data.split(b"\r\n\r\n")[0]
@@ -786,7 +817,27 @@ class SIPMessage:
         return self.parse_sip_message(data)
 
     def parse_sip_message(self, data: bytes) -> None:
-        headers, body = data.split(b"\r\n\r\n")
+        
+        parts = data.split(b"\r\n\r\n") # Split the data into it parts, assuming it might contain a multipart message
+        headers = parts[0] # The first part is the headers
+        headerlines = headers.split(b"\r\n") # Split the headers into lines
+
+        if any(b"Content-Type: multipart/mixed;boundary=" in headerline for headerline in headerlines):
+            # We have a multipart message
+            res = [multipartboundary for multipartboundary in headerlines if b"Content-Type: multipart/mixed;boundary=" in multipartboundary] # Find the boundary
+            boundary = res[0].split(b"boundary=")[1] # Get the boundary
+            
+            for idx, part in enumerate(parts[1:]):
+                partlines = part.split(b"\r\n")
+                if b"Content-Type: application/sdp" in partlines:
+                    body = parts[idx+2]
+                    body += b"\r\n"                    
+                    # Update the Content-Length header to reflect the actual length of the body
+                    part_length = len(body)
+                    headers = self.replace_content_length_and_type(headers.decode(), part_length).encode()
+                    break
+        else: # We have a standard SIP message
+            headers, body = data.split(b"\r\n\r\n")
 
         headers_raw = headers.split(b"\r\n")
         self.heading = headers_raw.pop(0)
