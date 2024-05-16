@@ -979,10 +979,6 @@ class SIPClient:
             self.callCallback(message)  # type: ignore
             response = self.gen_ok(message)
             self.out.sendto(response.encode("utf8"), (self.server, self.port))
-        elif message.method == "OPTIONS":
-            self.callCallback(message)  # type: ignore
-            response = self.gen_ok(message)
-            self.out.sendto(response.encode("utf8"), (self.server, self.port))
         else:
             debug("TODO: Add 400 Error on non processable request")
 
