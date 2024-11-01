@@ -9,6 +9,7 @@ setup(
     name="pyVoIP",
     version="1.6.8",
     description="PyVoIP is a pure python VoIP/SIP/RTP library.",
+    install_requires=['audioop-lts>=0.2.1; python_version>="3.13"'],
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Tayler Porter",
