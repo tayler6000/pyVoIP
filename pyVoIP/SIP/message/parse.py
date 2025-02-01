@@ -22,7 +22,7 @@ COMPACT_KEY = {
 
 def parse_raw_headers(raw_headers: List[bytes]) -> Dict[str, Any]:
     headers: Dict[str, Any] = {"Via": []}
-    # Only use first occurance of VIA header field;
+    # Only use first occurrence of VIA header field;
     # got second VIA from Kamailio running in DOCKER
     # According to RFC 3261 these messages should be
     # discarded in a response
@@ -299,7 +299,7 @@ def parse_sdp_tag(parsed_body: Dict[str, Any], field: str, data: str) -> Any:
         # b=<bwtype>:<bandwidth>
         # A bwtype of CT means Conference Total between all medias
         # and all devices in the conference.
-        # A bwtype of AS means Applicaton Specific total for this
+        # A bwtype of AS means Application Specific total for this
         # media and this device.
         # The bandwidth is given in kilobits per second.
         # As this was written in 2006, this could be Kibibits.
@@ -344,7 +344,7 @@ def parse_sdp_tag(parsed_body: Dict[str, Any], field: str, data: str) -> Any:
         # SDP 5.14 Media Descriptions
         # m=<media> <port>/<number of ports> <proto> <fmt> ...
         # <port> should be even, and <port>+1 should be the RTCP port.
-        # <number of ports> should coinside with number of
+        # <number of ports> should coincide with number of
         # addresses in SDP 5.7 c=
         if "m" not in parsed_body:
             parsed_body["m"] = []

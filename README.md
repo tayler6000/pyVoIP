@@ -21,7 +21,7 @@ This basic code will simple make a phone that will automatically answer then han
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.VoIP.call import VoIPCall
 from pyVoIP.VoIP.error import InvalidStateError
-from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
+from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParameter
 
 class Call(VoIPCall):
 
@@ -35,7 +35,7 @@ class Call(VoIPCall):
 if __name__ == "__main__":
   cm = CredentialsManager()
   cm.add(<SIP server username>, <SIP server password>)
-  params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
+  params = VoIPPhoneParameter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
   phone = VoIPPhone(params)
   phone.start()
   input('Press enter to disable the phone')

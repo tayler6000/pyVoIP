@@ -16,7 +16,7 @@ setup(
     url="https://github.com/tayler6000/pyVoIP",
     project_urls={
         "Bug Tracker": "https://github.com/tayler6000/pyVoIP/issues",
-        "Documentaiton": "https://pyvoip.readthedocs.io/",
+        "Documentation": "https://pyvoip.readthedocs.io/",
     },
     classifiers=[
         "Programming Language :: Python :: 3",

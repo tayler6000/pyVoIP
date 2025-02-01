@@ -17,7 +17,7 @@ class CredentialsManager:
         """
         Add a username and password for a server, realm, and/or user.
 
-        If you want to set a default ommit the option.  For examle, if you want
+        If you want to set a default omit the option.  For example, if you want
         to use the same username and password for the realm asterisk regardless
         of the server or user you would do:
 

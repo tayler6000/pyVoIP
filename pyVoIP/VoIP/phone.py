@@ -166,14 +166,14 @@ class VoIPPhone:
                 raise
 
     def _callback_MSG_Bye(self, request: SIPMessage) -> None:
-        debug("BYE recieved")
+        debug("BYE received")
         call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             return
         self.calls[call_id].bye()
 
     def _callback_MSG_Options(self, request: SIPMessage) -> str:
-        debug("Options recieved")
+        debug("Options received")
         response = self.sip.gen_busy(request)
         if self.call_class:
             response = response.replace("486 Busy Here", "200 OK")
@@ -240,7 +240,7 @@ class VoIPPhone:
         self.sip.sendto(ack)
 
     def _callback_RESP_NotFound(self, request: SIPMessage) -> None:
-        debug("Not Found recieved, invalid number called?")
+        debug("Not Found received, invalid number called?")
         call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unknown/No call")
@@ -254,7 +254,7 @@ class VoIPPhone:
         self.sip.sendto(ack)
 
     def _callback_RESP_Unavailable(self, request: SIPMessage) -> None:
-        debug("Service Unavailable recieved")
+        debug("Service Unavailable received")
         call_id = request.headers["Call-ID"]
         if call_id not in self.calls:
             debug("Unknown call")
