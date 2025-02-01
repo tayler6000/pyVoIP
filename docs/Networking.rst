@@ -20,7 +20,7 @@ pyVoIP.networking.nat.\ **AddressType**
   Used for determining remote or local tags in SIP messages.
 
   AddressType.\ **REMOTE**
-    
+
   AddressType.\ **LOCAL**
 
 .. _TransportMode:
@@ -30,21 +30,21 @@ pyVoIP.networking.transport.\ **TransportMode**
 
     TransportMode.\ **value**
       This is the string value of the TransportMode. For example, ``UDP`` or ``TLS``.
-      
+
     TransportMode.\ **socket_type**
       This is the `SocketKind <https://docs.python.org/3/library/socket.html?highlight=socket#constants>`_ associated with the TransportMode.
-      
+
     TransportMode.\ **tls_mode**
       This is either `PROTOCOL_TLS <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.PROTOCOL_TLS>`_ when using TLS or None otherwise.
-  
+
   Here is a list of current supported transport modes:
 
   TransportMode.\ **UDP**
     "UDP", `SOCK_DGRAM <https://docs.python.org/3/library/socket.html#socket.SOCK_DGRAM>`_, None
-    
+
   TransportMode.\ **TCP**
     "TCP", `SOCK_STREAM <https://docs.python.org/3/library/socket.html#socket.SOCK_STREAM>`_, None
-  
+
   TransportMode.\ **TLS**
     "TLS", `SOCK_STREAM <https://docs.python.org/3/library/socket.html#socket.SOCK_STREAM>`_, `PROTOCOL_TLS <https://docs.python.org/3/library/ssl.html?highlight=ssl#ssl.PROTOCOL_TLS>`_
 
@@ -69,7 +69,7 @@ The NAT class is used automatically understand and translate IPs and hostnames f
 
   **get_host**\ (host: str) -> str
     This method return the hostname another :term:`client` needs to connect to us.
-    
+
   **check_host**\ (host: str) -> :ref:`AddressType<AddressType>`
     This method determine if a host is a remote computer or not.
 
@@ -102,14 +102,14 @@ The VoIPSocket class is the phone's main SIP socket. It receives and processes a
 VoIPConnection
 ==============
 
-The VoIPConnecion class is a wrapper for Python's sockets. Since UDP, TCP, and TLS sockets all have different quarks in Python, this class consolidates everything into one interface. For UDP, VoIPConnection will pull messages from :ref:`VoIPSocket`'s database.
+The VoIPConnection class is a wrapper for Python's sockets. Since UDP, TCP, and TLS sockets all have different quarks in Python, this class consolidates everything into one interface. For UDP, VoIPConnection will pull messages from :ref:`VoIPSocket`'s database.
 
 *class* pyVoIP.networking.sock.\ **VoIPConnection**\ (voip_sock: :ref:`VoIPSocket`, conn: Optional[:ref:`SOCKETS<SOCKETS>`, message: :ref:`SIPMessage`)
-    The *voiop_socket* argument is a :ref:`VoIPSocket` instance reference.
+    The *voip_socket* argument is a :ref:`VoIPSocket` instance reference.
 
     The *conn* argument is the underlying Python socket.
 
-    The *message* argument is the :ref:`SIPMessage` used to initate the dialog.
+    The *message* argument is the :ref:`SIPMessage` used to initiate the dialog.
 
   **send**\ (data: Union[bytes, str]) -> None
     Sends *data* to the :term:`client`. If *data* is a string, it will be UTF8 encoded first.

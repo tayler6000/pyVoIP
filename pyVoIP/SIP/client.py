@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 debug = pyVoIP.debug
 
 
-UNAUTORIZED_RESPONSE_CODES = [
+UNAUTHORIZED_RESPONSE_CODES = [
     ResponseCode.UNAUTHORIZED,
     ResponseCode.PROXY_AUTHENTICATION_REQUIRED,
 ]
@@ -183,12 +183,12 @@ class SIPClient:
                 response = self.gen_ok(message)
                 try:
                     # BYE comes from client cause server only acts as mediator
-                    (_sender_adress, _sender_port) = message.headers["Via"][0][
+                    (_sender_address, _sender_port) = message.headers["Via"][0][
                         "address"
                     ]
                     self.sendto(
                         response,
-                        (_sender_adress, int(_sender_port)),
+                        (_sender_address, int(_sender_port)),
                     )
                 except Exception:
                     debug("BYE Answer failed falling back to server as target")
@@ -288,7 +288,7 @@ class SIPClient:
         password: Optional[str] = None,
         port=5060,
         uri_params: Optional[str] = None,
-        header_parms: Optional[str] = None,
+        header_params: Optional[str] = None,
     ) -> str:
         header_type = header_type.capitalize()
 
@@ -299,8 +299,8 @@ class SIPClient:
 
         uri = self.__gen_uri(method, user, host, password, port, uri_params)
         display_name = f'"{display_name}" ' if display_name else ""
-        header_parms = f"{header_parms}" if header_parms else ""
-        return f"{header_type}: {display_name}<{uri}>{header_parms}\r\n"
+        header_params = f"{header_params}" if header_params else ""
+        return f"{header_type}: {display_name}<{uri}>{header_params}\r\n"
 
     def __gen_uri(
         self,
@@ -559,7 +559,7 @@ class SIPClient:
             self.server,
             method=method,
             port=self.port,
-            header_parms=f";tag={tag}",
+            header_params=f";tag={tag}",
         )
         regRequest += self.__gen_from_to(
             "To", self.user, self.server, method=method, port=self.port
@@ -599,7 +599,7 @@ class SIPClient:
             self.nat.get_host(self.server),
             method=method,
             port=self.bind_port,
-            header_parms=f";tag={self.gen_tag()}",
+            header_params=f";tag={self.gen_tag()}",
         )
         subRequest += self.__gen_from_to(
             "To",
@@ -641,7 +641,7 @@ class SIPClient:
             self.server,
             method=method,
             port=self.port,
-            header_parms=f";tag={self.tagLibrary['register']}",
+            header_params=f";tag={self.tagLibrary['register']}",
         )
         regRequest += self.__gen_from_to(
             "To",
@@ -856,7 +856,7 @@ class SIPClient:
             self.user,
             self.nat.get_host(self.server),
             port=self.bind_port,
-            header_parms=f";tag={tag}",
+            header_params=f";tag={tag}",
         )
         invRequest += f"Call-ID: {call_id}\r\n"
         invRequest += f"CSeq: {self.inviteCounter.next()} INVITE\r\n"
@@ -904,7 +904,7 @@ class SIPClient:
             self.user,
             self.nat.get_host(self.bind_ip),
             method,
-            header_parms=f";tag={tag}",
+            header_params=f";tag={tag}",
         )
 
         # Determine if To or From is local to decide who the refer is to
@@ -1122,7 +1122,7 @@ class SIPClient:
             type(response) is SIPResponse
             and (
                 response.status
-                not in UNAUTORIZED_RESPONSE_CODES + INVITE_OK_RESPONSE_CODES
+                not in UNAUTHORIZED_RESPONSE_CODES + INVITE_OK_RESPONSE_CODES
             )
             or response.headers["Call-ID"] != call_id
         ):
@@ -1173,7 +1173,7 @@ class SIPClient:
             self.nat.get_host(self.server),
             method=method,
             port=self.bind_port,
-            header_parms=f";tag={self.gen_tag()}",
+            header_params=f";tag={self.gen_tag()}",
         )
         msg += self.__gen_from_to(
             "To",
@@ -1339,7 +1339,7 @@ class SIPClient:
         try:
             registered = self.__register()
             if not registered:
-                debug("REGISTERATION FAILED")
+                debug("REGISTRATION FAILED")
                 self.register_failures += 1
             else:
                 self.phone._status = PhoneStatus.REGISTERED
@@ -1354,7 +1354,7 @@ class SIPClient:
 
             return registered
         except BaseException as e:
-            debug(f"REGISTERATION ERROR: {e}")
+            debug(f"REGISTRATION ERROR: {e}")
             self.register_failures += 1
             if self.register_failures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
                 self.stop()

@@ -8,16 +8,16 @@ Setup
 
 PyVoIP uses a :ref:`VoIPPhone` class to receive and initiate phone calls. The settings for our phone are passed via the :ref:`VoIPPhoneParameter` dataclass. When a call is received, a new instance of a :ref:`VoIPCall` is initialized. You can overwrite this class in initialization of VoIPPhone.
 
-In this example, we are importing :ref:`CredentialsManager`, :ref:`VoIPPhone`, :ref:`VoIPPhoneParameter`, :ref:`VoIPCall`, and :ref:`InvalidStateError<InvalidStateError>`. :ref:`CredentialsManager` stores and retreives passwords for authentication with registrars. :ref:`VoIPPhone` is the main class for our `softphone <https://en.wikipedia.org/wiki/Softphone>`_. :ref:`VoIPPhoneParameter` is the settings for our :ref:`VoIPPhone`. :ref:`VoIPCall` will be used to create our custom answering class. An :ref:`InvalidStateError<InvalidStateError>` is thrown when you try to perform an impossible command. For example, denying the call when the phone is already answered, answering when it's already answered, etc.
+In this example, we are importing :ref:`CredentialsManager`, :ref:`VoIPPhone`, :ref:`VoIPPhoneParameter`, :ref:`VoIPCall`, and :ref:`InvalidStateError<InvalidStateError>`. :ref:`CredentialsManager` stores and retrieves passwords for authentication with registrars. :ref:`VoIPPhone` is the main class for our `softphone <https://en.wikipedia.org/wiki/Softphone>`_. :ref:`VoIPPhoneParameter` is the settings for our :ref:`VoIPPhone`. :ref:`VoIPCall` will be used to create our custom answering class. An :ref:`InvalidStateError<InvalidStateError>` is thrown when you try to perform an impossible command. For example, denying the call when the phone is already answered, answering when it's already answered, etc.
 
 The following will create a phone that answers and automatically hangs up:
 
 .. code-block:: python
-   
+
   from pyVoIP.credentials import CredentialsManager
   from pyVoIP.VoIP.call import VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
-  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
+  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParameter
 
   class Call(VoIPCall):
 
@@ -31,12 +31,12 @@ The following will create a phone that answers and automatically hangs up:
   if __name__ == "__main__":
       cm = CredentialsManager()
       cm.add(<SIP server username>, <SIP server password>)
-      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
+      params = VoIPPhoneParameter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computers local IP>, call_class=Call)
       phone = VoIPPhone(params)
       phone.start()
       input('Press enter to disable the phone')
       phone.stop()
-    
+
 Announcement Board
 ******************
 
@@ -47,7 +47,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
   from pyVoIP.credentials import CredentialsManager
   from pyVoIP.VoIP.call import VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
-  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
+  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParameter
   import time
   import wave
 
@@ -55,16 +55,16 @@ Let's say you want to make a phone that when you call it, it plays an announceme
 
       def ringing(self, invite_request):
           try:
-              f = wave.open('announcment.wav', 'rb')
+              f = wave.open('announcement.wav', 'rb')
               frames = f.getnframes()
               data = f.readframes(frames)
               f.close()
-          
+
               call.answer()
               call.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
-          
+
               stop = time.time() + (frames / 8000)  # frames/8000 is the length of the audio in seconds. 8000 is the hertz of PCMU.
-          
+
               while time.time() <= stop and call.state == CallState.ANSWERED:
                   time.sleep(0.1)
               call.hangup()
@@ -76,7 +76,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
   if __name__ == "__main__":
       cm = CredentialsManager()
       cm.add(<SIP server username>, <SIP server password>)
-      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
+      params = VoIPPhoneParameter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
       phone = VoIPPhone(params)
       phone.start()
       input('Press enter to disable the phone')
@@ -87,7 +87,7 @@ Something important to note is our wait function. We are currently using:
 .. code-block:: python
 
   stop = time.time() + (frames / 8000)  # The number of frames/8000 is the length of the audio in seconds.
-      
+
   while time.time() <= stop and call.state == CallState.ANSWERED:
       time.sleep(0.1)
 
@@ -105,10 +105,10 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
   from pyVoIP.credentials import CredentialsManager
   from pyVoIP.VoIP.call import VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
-  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
+  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParameter
   import time
   import wave
-  
+
   class Call(VoIPCall):
 
       def ringing(self, invite_request):
@@ -117,10 +117,10 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
               frames = f.getnframes()
               data = f.readframes(frames)
               f.close()
-          
+
               call.answer()
               call.write_audio(data)
-          
+
               while call.state == CallState.ANSWERED:
                   dtmf = call.get_dtmf()
                   if dtmf == "1":
@@ -138,7 +138,7 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
   if __name__ == '__main__':
       cm = CredentialsManager()
       cm.add(<SIP server username>, <SIP server password>)
-      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
+      params = VoIPPhoneParameter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
       phone = VoIPPhone(params)
       phone.start()
       input('Press enter to disable the phone')
@@ -156,7 +156,7 @@ We can use the following code to handle various states for calls:
   from pyVoIP.credentials import CredentialsManager
   from pyVoIP.VoIP.call import VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
-  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
+  from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParameter
   import time
   import wave
 
@@ -181,7 +181,7 @@ We can use the following code to handle various states for calls:
   if __name__ == '__main__':
       cm = CredentialsManager()
       cm.add(<SIP server username>, <SIP server password>)
-      params = VoIPPhoneParamter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
+      params = VoIPPhoneParameter(<SIP server IP>, <SIP server port>, <SIP server user>, cm, bind_ip=<Your computer's local IP>, call_class=Call)
       phone = VoIPPhone(params)
       phone.start()
       phone.call(<Phone Number>)

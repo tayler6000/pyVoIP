@@ -12,10 +12,10 @@ There are three errors under ``pyVoIP.VoIP.error``.
 
 *exception* pyVoIP.VoIP.error.\ **InvalidStateError**
   This is thrown by :ref:`VoIPCall` when you try to perform an action that cannot be performed during the current :ref:`CallState<callstate>`. For example denying a call that has already been answered, hanging up a call that hasn't been answered yet, or has already ended.
-  
+
 *exception* pyVoIP.VoIP.error.\ **InvalidRangeError**
   This is thrown by :ref:`VoIPPhone` when you define the RTP port ranges as rtp_port_low > rtp_port_high. However, this is not checked by :ref:`VoIPCall`, so if you are using your own class instead of VoIPPhone, make sure these ranges are correct.
-  
+
 *exception* pyVoIP.VoIP.error.\ **NoPortsAvailableError**
   This is thrown when a call is attempting to be initiated but no RTP ports are available.
 
@@ -84,9 +84,9 @@ VoIPCall
 The VoIPCall class is used to represent a single VoIP session, which may be to multiple :term:`clients<client>`.
 
 *class* pyVoIP.VoIP.call.\ **VoIPCall**\ (phone: :ref:`VoIPPhone`, callstate: :ref:`CallState <CallState>`, request: :ref:`SIPMessage`, session_id: int, bind_ip: str, conn: :ref:`VoIPConnection`, ms: Optional[Dict[int, :ref:`PayloadType<payload-type>`]] = None, sendmode="sendonly")
-      The *phone* argument is the initating instance of :ref:`VoIPPhone`.
+      The *phone* argument is the initiating instance of :ref:`VoIPPhone`.
 
-      The *callstate* arguement is the initiating :ref:`CallState<callstate>`.
+      The *callstate* argument is the initiating :ref:`CallState<callstate>`.
 
       The *request* argument is the :ref:`SIPMessage` representation of the SIP INVITE request from the VoIP server.
 
@@ -94,14 +94,14 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 
       The *bind_ip* argument is the IP address that pyVoIP will bind its sockets to.
 
-      The *ms* arguement is a dictionary with int as the key and a :ref:`PayloadType<payload-type>` as the value. This is only used when originating the call.
+      The *ms* argument is a dictionary with int as the key and a :ref:`PayloadType<payload-type>` as the value. This is only used when originating the call.
 
 
     **get_dtmf**\ (length=1) -> str
       This method can be called get the next pressed DTMF key. DTMF's are stored in an `StringIO <https://docs.python.org/3/library/io.html?highlight=stringio#io.StringIO>`_ which is a buffer. Calling this method when there a key has not been pressed returns an empty string. To return the entire contents of the buffer set length to a negative number or None. If the :term:`client` presses the numbers 1-9-5 you'll have the following output:
-  
+
       .. code-block:: python
-  
+
         self.get_dtmf()
         >>> '1'
         self.get_dtmf(length=2)
@@ -120,22 +120,22 @@ The VoIPCall class is used to represent a single VoIP session, which may be to m
 
     **ringing**\ (request: :ref:`SIPMessage`) -> None
       This function is what is called when receiving a new call. Custom VoIPCall classes should override this function to answer the call.
- 
+
     **deny**\ () -> None
       Denies the call if the phone's state is CallState.RINGING.
- 
+
     **hangup**\ () -> None
       Ends the call if the phone's state is CallState.ANSWRED.
- 
+
     **cancel**\ () -> None
       Cancels a dialing call.
- 
+
     **write_audio**\ (data: bytes) -> None
       Writes linear/raw audio data to the transmit buffer before being encoded and sent. The *data* argument MUST be bytes. **This audio must be linear/not encoded.** :ref:`RTPClient` **will encode it before transmitting.**
- 
+
     **read_audio**\ (length=160, blocking=True) -> bytes
       Reads linear/raw audio data from the received buffer. Returns *length* amount of bytes. Default length is 160 as that is the amount of bytes sent per PCMU/PCMA packet. When *blocking* is set to true, this function will not return until data is available. When *blocking* is set to false and data is not available, this function will return ``b"\x80" * length``.
-    
+
 .. _VoIPPhoneParameter:
 
 VoIPPhoneParameter
@@ -180,18 +180,18 @@ The VoIPPhone class is used to manage the :ref:`SIPClient` class and create :ref
 *class* pyVoIP.VoIP.phone.\ **VoIPPhone**\ (voip_phone_parameter: :ref:`VoIPPhoneParameter`)
   **get_status**\ () -> :ref:`PhoneStatus <PhoneStatus>`
     This method returns the phone's current status.
-    
+
   **start**\ () -> None
     This method starts the :ref:`SIPClient` class. On failure, this will automatically call stop().
-    
+
   **stop**\ () -> None
     This method ends all ongoing calls, then stops the :ref:`SIPClient` class
-  
+
   **call**\ (number: str, payload_types: Optional[List[:ref:`PayloadType<payload-type>`]] = None) -> :ref:`VoIPCall`
-    Originates a call using the specified *payload_types*, or PCMU and telephone-event by default. The *number* argument must be a string. 
+    Originates a call using the specified *payload_types*, or PCMU and telephone-event by default. The *number* argument must be a string.
 
     Returns a :ref:`VoIPCall` class in CallState.DIALING.
 
   **message**\ (number: str, body: str, ctype = "text/plain") -> bool
     Sends a MESSAGE request to the *number* with the text of *body*, and the Content-Type header is set to the value of *ctype*.
-  
+

@@ -84,7 +84,7 @@ The following table shows all the change types we use. All like change types sho
 | Fixed something that was broken | FIX |
 | Removed code, file, etc. | REMOVE |
 
-Each line of your commit message should not excede 79 characters.  PEP8 limits code to 79 characters long because `Limiting the required editor window width makes it possible to have several files open side by side, and works well when using code review tools that present the two versions in adjacent columns`. This will ensure readability when running `git log`.
+Each line of your commit message should not exceed 79 characters.  PEP8 limits code to 79 characters long because `Limiting the required editor window width makes it possible to have several files open side by side, and works well when using code review tools that present the two versions in adjacent columns`. This will ensure readability when running `git log`.
 
 For multilined descriptions, the following line should start inline with the first letter after the change type.
 

@@ -205,7 +205,7 @@ class RTPPacketManager:
             self.bufferLock.release()
             """
             Rebuilds the buffer if something before the earliest
-            timestamp comes in, this will stop overwritting.
+            timestamp comes in, this will stop overwriting.
             """
             self.rebuild(reset, offset, data)
             return
@@ -415,7 +415,7 @@ class RTPClient:
             self.outSequence += 1
             self.outTimestamp += len(payload)
             # Calculate how long it took to generate this packet.
-            # Then how long we should wait to send the next, then devide by 2.
+            # Then how long we should wait to send the next, then divide by 2.
             delay = (1 / self.preference.rate) * 160
             sleep_time = max(
                 0, delay - ((time.monotonic_ns() - last_sent) / 1000000000)
