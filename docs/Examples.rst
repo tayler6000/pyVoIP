@@ -45,7 +45,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
 .. code-block:: python
 
   from pyVoIP.credentials import CredentialsManager
-  from pyVoIP.VoIP.call import VoIPCall
+  from pyVoIP.VoIP.call import CallState, VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
   from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
   import time
@@ -60,18 +60,18 @@ Let's say you want to make a phone that when you call it, it plays an announceme
               data = f.readframes(frames)
               f.close()
           
-              call.answer()
-              call.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
+              self.answer()
+              self.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
           
               stop = time.time() + (frames / 8000)  # frames/8000 is the length of the audio in seconds. 8000 is the hertz of PCMU.
           
-              while time.time() <= stop and call.state == CallState.ANSWERED:
+              while time.time() <= stop and self.state == CallState.ANSWERED:
                   time.sleep(0.1)
-              call.hangup()
+              self.hangup()
           except InvalidStateError:
               pass
           except:
-              call.hangup()
+              self.hangup()
 
   if __name__ == "__main__":
       cm = CredentialsManager()
@@ -103,7 +103,7 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
 .. code-block:: python
 
   from pyVoIP.credentials import CredentialsManager
-  from pyVoIP.VoIP.call import VoIPCall
+  from pyVoIP.VoIP.call import CallState, VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
   from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
   import time
@@ -118,22 +118,22 @@ We can use the following code to create `IVR Menus <https://en.wikipedia.org/wik
               data = f.readframes(frames)
               f.close()
           
-              call.answer()
-              call.write_audio(data)
+              self.answer()
+              self.write_audio(data)
           
-              while call.state == CallState.ANSWERED:
-                  dtmf = call.get_dtmf()
+              while self.state == CallState.ANSWERED:
+                  dtmf = self.get_dtmf()
                   if dtmf == "1":
-                      if call.transfer("sales")  # Transfer to same registrar
+                      if self.transfer("sales")  # Transfer to same registrar
                         return
                   elif dtmf == "2":
-                      if call.transfer(uri="<100@different_regisrar.com>")
+                      if self.transfer(uri="<100@different_regisrar.com>")
                         return
                   time.sleep(0.1)
           except InvalidStateError:
               pass
           except:
-              call.hangup()
+              self.hangup()
 
   if __name__ == '__main__':
       cm = CredentialsManager()
