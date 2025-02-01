@@ -45,7 +45,7 @@ Let's say you want to make a phone that when you call it, it plays an announceme
 .. code-block:: python
 
   from pyVoIP.credentials import CredentialsManager
-  from pyVoIP.VoIP.call import VoIPCall
+  from pyVoIP.VoIP.call import CallState, VoIPCall
   from pyVoIP.VoIP.error import InvalidStateError
   from pyVoIP.VoIP.phone import VoIPPhone, VoIPPhoneParamter
   import time
@@ -60,18 +60,18 @@ Let's say you want to make a phone that when you call it, it plays an announceme
               data = f.readframes(frames)
               f.close()
           
-              call.answer()
-              call.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
+              self.answer()
+              self.write_audio(data)  # This writes the audio data to the transmit buffer, this must be bytes.
           
               stop = time.time() + (frames / 8000)  # frames/8000 is the length of the audio in seconds. 8000 is the hertz of PCMU.
           
-              while time.time() <= stop and call.state == CallState.ANSWERED:
+              while time.time() <= stop and self.state == CallState.ANSWERED:
                   time.sleep(0.1)
-              call.hangup()
+              self.hangup()
           except InvalidStateError:
               pass
           except:
-              call.hangup()
+              self.hangup()
 
   if __name__ == "__main__":
       cm = CredentialsManager()
