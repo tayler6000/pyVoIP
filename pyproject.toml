@@ -1,9 +1,38 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
-]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyVoIP"
+version = "2.0.0a5"
+authors = [{ name = "Tayler Porter", email = "taylerporter@gmail.com" }]
+requires-python = ">=3.8"
+readme = "README.md"
+description = "PyVoIP is a pure python VoIP/SIP/RTP library."
+classifiers=[
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Telecommunications Industry",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Natural Language :: English",
+  "Topic :: Communications :: Internet Phone",
+  "Topic :: Communications :: Telephony",
+]
+
+[project.urls]
+Documentation = "https://pyvoip.readthedocs.io/"
+Repository = "https://github.com/tayler6000/pyVoIP"
+"Bug Tracker" = "https://github.com/tayler6000/pyVoIP/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests"]
+
+[tool.setuptools.package-data]
+"pyVoIP" = ["py.typed"]
+
 [tool.black]
 line-length = 79
 target-version = ['py38']
