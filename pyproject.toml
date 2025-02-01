@@ -23,6 +23,13 @@ classifiers=[
   "Topic :: Communications :: Telephony",
 ]
 
+[project.optional-dependencies]
+test = [
+  "black",
+  "flake8",
+  "pytest",
+]
+
 [project.urls]
 Documentation = "https://pyvoip.readthedocs.io/"
 Repository = "https://github.com/tayler6000/pyVoIP"
