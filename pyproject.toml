@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pyVoIP"
 version = "2.0.0a5"
 authors = [{ name = "Tayler Porter", email = "taylerporter@gmail.com" }]
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 readme = "README.md"
 description = "PyVoIP is a pure python VoIP/SIP/RTP library."
