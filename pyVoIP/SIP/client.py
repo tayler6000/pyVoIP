@@ -41,7 +41,6 @@ UNAUTORIZED_RESPONSE_CODES = [
     ResponseCode.PROXY_AUTHENTICATION_REQUIRED,
 ]
 INVITE_OK_RESPONSE_CODES = [
-    ResponseCode.TRYING,
     ResponseCode.RINGING,
     ResponseCode.OK,
 ]
