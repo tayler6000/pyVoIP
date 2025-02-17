@@ -61,7 +61,7 @@ class SIPClient:
         remote_hostname: Optional[str] = None,
         bind_port=5060,
         call_callback: Optional[
-            Callable[["VoIPConnection", SIPMessage], Optional[str]]
+            Callable[[Optional["VoIPConnection"], SIPMessage], Optional[str]]
         ] = None,
         fatal_callback: Optional[Callable[..., None]] = None,
         transport_mode: TransportMode = TransportMode.UDP,
@@ -165,7 +165,7 @@ class SIPClient:
                 ResponseCode.REQUEST_TERMINATED,
             ):
                 if self.call_callback is not None:
-                    self.call_callback(message)
+                    self.call_callback(None, message)
             elif message.status == ResponseCode.TRYING:
                 pass
             else:
@@ -179,7 +179,7 @@ class SIPClient:
             if message.method == "BYE":
                 # TODO: If callCallback is None, the call doesn't exist, 481
                 if self.call_callback:
-                    self.call_callback(message)
+                    self.call_callback(None, message)
                 response = self.gen_ok(message)
                 try:
                     # BYE comes from client cause server only acts as mediator
@@ -197,12 +197,12 @@ class SIPClient:
                 return
             elif message.method == "CANCEL":
                 # TODO: If callCallback is None, the call doesn't exist, 481
-                self.call_callback(message)  # type: ignore
+                self.call_callback(None, message)  # type: ignore
                 response = self.gen_ok(message)
                 self.sendto(response, message.headers["Via"]["address"])
             elif message.method == "OPTIONS":
                 if self.call_callback:
-                    response = str(self.call_callback(message))
+                    response = str(self.call_callback(None, message))
                 else:
                     response = self._gen_options_response(message)
                 self.sendto(response, message.headers["Via"]["address"])

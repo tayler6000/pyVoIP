@@ -103,7 +103,7 @@ class VoIPPhone:
         )
 
     def callback(
-        self, conn: VoIPConnection, request: SIPMessage
+        self, conn: Optional[VoIPConnection], request: SIPMessage
     ) -> Optional[str]:
         # debug("Callback: "+request.summary())
         if type(request) is SIPRequest:
