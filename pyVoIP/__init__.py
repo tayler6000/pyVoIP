@@ -1,6 +1,6 @@
 __all__ = ["SIP", "RTP", "VoIP"]
 
-version_info = (1, 6, "8")
+version_info = (1, 6, "9")
 
 __version__ = ".".join([str(x) for x in version_info])
 
