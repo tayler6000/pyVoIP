@@ -710,10 +710,8 @@ class SIPMessage:
                         or attribute == "sendonly"
                         or attribute == "inactive"
                     ):
-                        self.body["a"][
-                            "transmit_type"
-                        ] = pyVoIP.RTP.TransmitType(
-                            attribute
+                        self.body["a"]["transmit_type"] = (
+                            pyVoIP.RTP.TransmitType(attribute)
                         )  # noqa: E501
             else:
                 self.body[header] = data
@@ -1637,6 +1635,14 @@ class SIPClient:
                 + f'"{realm}",nonce="{nonce}",uri="sip:{self.server};'
                 + f'transport=UDP",response="{str(authhash, "utf8")}",'
                 + "algorithm=MD5\r\n"
+            )
+
+            hexindex = (
+                -5
+            )  # increment the hex digit at this position to get a slightly different branch id
+            hexdigit = (int(branch[hexindex], 16) + 1) & 15
+            branch = (
+                branch[0:hexindex] + f"{hexdigit:x}" + branch[hexindex + 1 :]
             )
 
             invite = self.gen_invite(
