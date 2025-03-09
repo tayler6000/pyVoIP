@@ -369,18 +369,25 @@ class SIPMessage:
         data += str(self.raw)
 
         return data
+    
+    def replace_content_length_and_type(self, text, new_length, new_contenttype="application/sdp"):
+        clpattern = r"Content-Length: \d+\r\n"
+        clreplacement = f"Content-Length: {new_length}\r\n"
+        updated_text = re.sub(clpattern, clreplacement, text)
+        ctpattern = r"Content-Type: .+\r\n"
+        ctreplacement = f"Content-Type: {new_contenttype}\r\n"
+        updated_text = re.sub(ctpattern, ctreplacement, updated_text)
+        return updated_text
 
     def parse(self, data: bytes) -> None:
+
         try:
-            headers, body = data.split(b"\r\n\r\n")
-        except ValueError as ve:
-            debug(f"Error unpacking data, only using header: {ve}")
-            headers = data.split(b"\r\n\r\n")[0]
-
-        headers_raw = headers.split(b"\r\n")
-        heading = headers_raw.pop(0)
-        check = str(heading.split(b" ")[0], "utf8")
-
+            messagelines = data.split(b"\r\n")
+            heading = messagelines.pop(0)
+            check = str(heading.split(b" ")[0], "utf8")
+        except Exception as e:
+            raise SIPParseError(f"Unable to decipher SIP message: {e}")
+        
         if check in self.SIPCompatibleVersions:
             self.type = SIPMessageType.RESPONSE
             self.parse_sip_response(data)
@@ -783,9 +790,32 @@ class SIPMessage:
         )
         return self.parse_sip_message(data)
 
-    def parse_sip_message(self, data: bytes) -> None:
-        headers, body = data.split(b"\r\n\r\n")
+    def split_sip_message(self, data: bytes) -> Tuple[bytes, bytes]:
+        parts = data.split(b"\r\n\r\n") # Split the data into it parts, assuming it might contain a multipart message
+        headers = parts[0] # The first part is the headers
+        headerlines = headers.split(b"\r\n") # Split the headers into lines
 
+        # TODO handle Offerless INVITE, Content-Length is 0
+
+        if any(b"Content-Type: multipart" in headerline for headerline in headerlines): # Hacking the headers and body to look like a non multipart request
+            # We have a multipart message, lets find the SDP
+            for idx, part in enumerate(parts[1:]):
+                partlines = part.split(b"\r\n")
+                if b"Content-Type: application/sdp" in partlines:
+                    body = parts[idx+2] + b"\r\n"                  
+                    # Update the Content-Length and Content-Type header to reflect the actual length of the body
+                    headers = self.replace_content_length_and_type(headers.decode(), len(body)).encode()
+                    break
+        else: # We have a non Multipart SIP message
+            headers, body = data.split(b"\r\n\r\n")
+        
+        # TODO return more complex body, e.g., a class, including all the parts, then use the specific one for its purpose as the request is processed.
+
+        return headers, body
+
+
+    def parse_sip_message(self, data: bytes) -> None:
+        headers, body = self.split_sip_message(data)
         headers_raw = headers.split(b"\r\n")
         self.heading = headers_raw.pop(0)
         self.version = str(self.heading.split(b" ")[2], "utf8")
